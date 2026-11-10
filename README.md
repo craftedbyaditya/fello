@@ -16,6 +16,14 @@ flutter pub get
 flutter run -d chrome --web-port=3847
 ```
 
+Static preview build (also used for publish):
+
+```bash
+flutter build web --release
+rm -rf public && mkdir public && cp -R build/web/* public/
+python3 -m http.server 3847 --bind 127.0.0.1 --directory public
+```
+
 Demo organisation login:
 
 - Email: `ada@harbor.coffee`
