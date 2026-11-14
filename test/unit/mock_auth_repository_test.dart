@@ -1,5 +1,7 @@
 import 'package:fello/data/mock/mock_auth_repository.dart';
 import 'package:fello/data/mock/mock_store.dart';
+import 'package:fello/domain/auth_failure.dart';
+import 'package:fello/domain/entities/business_type.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -18,6 +20,7 @@ void main() {
     );
     expect(session.profile.email, 'ada@harbor.coffee');
     expect(session.organization.name, 'Harbor Coffee');
+    expect(session.organization.needsOnboarding, isFalse);
     expect(repo.currentSession, isNotNull);
   });
 
@@ -28,14 +31,56 @@ void main() {
     );
   });
 
-  test('sign up creates org and session', () async {
+  test('sign up creates placeholder workspace needing onboarding', () async {
     final session = await repo.signUp(
       email: 'new@example.com',
       password: 'secret1',
-      organizationName: 'Northwind',
       displayName: 'Sam',
     );
-    expect(session.organization.slug, 'northwind');
     expect(session.profile.displayName, 'Sam');
+    expect(session.organization.name, 'My workspace');
+    expect(session.organization.needsOnboarding, isTrue);
+    expect(session.organization.businessType, isNull);
+  });
+
+  test('complete onboarding sets name, business type, and completion', () async {
+    await repo.signUp(
+      email: 'new@example.com',
+      password: 'secret1',
+      displayName: 'Sam',
+    );
+    final session = await repo.completeOnboarding(
+      organizationName: 'Northwind',
+      businessType: BusinessType.retail,
+    );
+    expect(session.organization.name, 'Northwind');
+    expect(session.organization.slug, 'northwind');
+    expect(session.organization.businessType, BusinessType.retail);
+    expect(session.organization.needsOnboarding, isFalse);
+  });
+
+  test('complete onboarding can skip business type', () async {
+    await repo.signUp(
+      email: 'skip@example.com',
+      password: 'secret1',
+      displayName: 'Sam',
+    );
+    final session = await repo.completeOnboarding(
+      organizationName: 'Skip Co',
+    );
+    expect(session.organization.businessType, isNull);
+    expect(session.organization.needsOnboarding, isFalse);
+  });
+
+  test('complete onboarding rejects empty organisation name', () async {
+    await repo.signUp(
+      email: 'bad@example.com',
+      password: 'secret1',
+      displayName: 'Sam',
+    );
+    expect(
+      () => repo.completeOnboarding(organizationName: '   '),
+      throwsA(isA<AuthFailure>()),
+    );
   });
 }

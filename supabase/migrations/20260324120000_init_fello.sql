@@ -127,31 +127,40 @@ alter table public.responses enable row level security;
 alter table public.answers enable row level security;
 
 -- Organizations
+drop policy if exists org_select_member on public.organizations;
 create policy org_select_member on public.organizations
   for select using (id = public.current_org_id());
+drop policy if exists org_update_member on public.organizations;
 create policy org_update_member on public.organizations
   for update using (id = public.current_org_id());
 
 -- Profiles
+drop policy if exists profiles_select_self_org on public.profiles;
 create policy profiles_select_self_org on public.profiles
   for select using (org_id = public.current_org_id());
+drop policy if exists profiles_update_self on public.profiles;
 create policy profiles_update_self on public.profiles
   for update using (id = auth.uid());
 
 -- Forms: members CRUD; anon can read published
+drop policy if exists forms_select_member on public.forms;
 create policy forms_select_member on public.forms
   for select using (
     org_id = public.current_org_id()
     or status = 'published'
   );
+drop policy if exists forms_insert_member on public.forms;
 create policy forms_insert_member on public.forms
   for insert with check (org_id = public.current_org_id());
+drop policy if exists forms_update_member on public.forms;
 create policy forms_update_member on public.forms
   for update using (org_id = public.current_org_id());
+drop policy if exists forms_delete_member on public.forms;
 create policy forms_delete_member on public.forms
   for delete using (org_id = public.current_org_id());
 
 -- Questions: members CRUD; anon read for published forms
+drop policy if exists questions_select on public.questions;
 create policy questions_select on public.questions
   for select using (
     exists (
@@ -160,6 +169,7 @@ create policy questions_select on public.questions
         and (f.org_id = public.current_org_id() or f.status = 'published')
     )
   );
+drop policy if exists questions_insert_member on public.questions;
 create policy questions_insert_member on public.questions
   for insert with check (
     exists (
@@ -167,6 +177,7 @@ create policy questions_insert_member on public.questions
       where f.id = form_id and f.org_id = public.current_org_id()
     )
   );
+drop policy if exists questions_update_member on public.questions;
 create policy questions_update_member on public.questions
   for update using (
     exists (
@@ -174,6 +185,7 @@ create policy questions_update_member on public.questions
       where f.id = form_id and f.org_id = public.current_org_id()
     )
   );
+drop policy if exists questions_delete_member on public.questions;
 create policy questions_delete_member on public.questions
   for delete using (
     exists (
@@ -183,6 +195,7 @@ create policy questions_delete_member on public.questions
   );
 
 -- Responses: members read; anon insert only for published forms
+drop policy if exists responses_select_member on public.responses;
 create policy responses_select_member on public.responses
   for select using (
     exists (
@@ -190,6 +203,7 @@ create policy responses_select_member on public.responses
       where f.id = form_id and f.org_id = public.current_org_id()
     )
   );
+drop policy if exists responses_insert_anon_published on public.responses;
 create policy responses_insert_anon_published on public.responses
   for insert with check (
     exists (
@@ -199,6 +213,7 @@ create policy responses_insert_anon_published on public.responses
   );
 
 -- Answers: members read; insert when parent response form is published
+drop policy if exists answers_select_member on public.answers;
 create policy answers_select_member on public.answers
   for select using (
     exists (
@@ -208,6 +223,7 @@ create policy answers_select_member on public.answers
       where r.id = response_id and f.org_id = public.current_org_id()
     )
   );
+drop policy if exists answers_insert_published on public.answers;
 create policy answers_insert_published on public.answers
   for insert with check (
     exists (

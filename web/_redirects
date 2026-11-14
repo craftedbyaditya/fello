@@ -1,0 +1,3 @@
+# SPA fallback for Netlify / Cloudflare Pages
+# Keeps Flutter path routes (/dashboard, /f/:slug, etc.) working on refresh.
+/*    /index.html   200

@@ -4,7 +4,10 @@ import 'package:uuid/uuid.dart';
 import '../../domain/entities/dashboard_stats.dart';
 import '../../domain/entities/question.dart';
 import '../../domain/entities/response.dart';
+import '../../domain/plan_limit_failure.dart';
 import '../../domain/repositories/response_repository.dart';
+import '../../domain/submit_guard_failure.dart';
+import '../plan_limit_messages.dart';
 
 class SupabaseResponseRepository implements ResponseRepository {
   SupabaseResponseRepository(this._client);
@@ -19,35 +22,37 @@ class SupabaseResponseRepository implements ResponseRepository {
   }) async {
     var query = _client
         .from('responses')
-        .select('*, answers(*), forms!inner(org_id)')
+        .select('*, answers(*), forms!inner(org_id, id)')
         .eq('forms.org_id', orgId);
 
     if (filters.formId != null) {
       query = query.eq('form_id', filters.formId!);
     }
     if (filters.from != null) {
-      query = query.gte('submitted_at', filters.from!.toIso8601String());
+      query = query.gte('submitted_at', filters.from!.toUtc().toIso8601String());
     }
     if (filters.to != null) {
-      query = query.lte('submitted_at', filters.to!.toIso8601String());
+      final end = DateTime(
+        filters.to!.year,
+        filters.to!.month,
+        filters.to!.day,
+        23,
+        59,
+        59,
+      );
+      query = query.lte('submitted_at', end.toUtc().toIso8601String());
     }
 
     final rows = await query.order('submitted_at', ascending: false);
+    final questions = await _questionsForOrg(orgId);
     var list = (rows as List)
         .map((r) => _mapResponse(r as Map<String, dynamic>))
         .toList();
 
-    // Client-side filter for rating/NPS bands (needs joined question types)
-    if (filters.minRating != null ||
-        filters.maxRating != null ||
-        filters.npsBand != null) {
-      final questions = await _questionsForOrg(orgId);
-      list = list.where((r) {
-        if (!_passesRatingFilter(r, questions, filters)) return false;
-        if (!_passesNpsFilter(r, questions, filters)) return false;
-        return true;
-      }).toList();
-    }
+    list = list
+        .where((r) => _passesRatingFilter(r, questions, filters))
+        .where((r) => _passesNpsFilter(r, questions, filters))
+        .toList();
     return list;
   }
 
@@ -66,35 +71,104 @@ class SupabaseResponseRepository implements ResponseRepository {
     required String formId,
     required Map<String, dynamic> answersByQuestionId,
     Map<String, dynamic> metadata = const {},
+    String? clientKey,
+    String? submissionId,
+    String? turnstileToken,
   }) async {
-    final responseId = _uuid.v4();
-    await _client.from('responses').insert({
-      'id': responseId,
-      'form_id': formId,
-      'metadata': metadata,
-    });
+    final sid = submissionId ?? _uuid.v4();
+    final key = (clientKey == null || clientKey.isEmpty)
+        ? 'anonymous'
+        : clientKey;
 
-    if (answersByQuestionId.isNotEmpty) {
-      await _client.from('answers').insert(
-            answersByQuestionId.entries
-                .map(
-                  (e) => {
-                    'id': _uuid.v4(),
-                    'response_id': responseId,
-                    'question_id': e.key,
-                    'value': e.value,
-                  },
-                )
-                .toList(),
-          );
+    // Direct RPC is revoked for anon/authenticated — Edge Function only.
+    if (turnstileToken == null || turnstileToken.isEmpty) {
+      throw const SubmitGuardFailure(
+        'Please complete the captcha before submitting.',
+      );
     }
 
-    final row = await _client
-        .from('responses')
-        .select('*, answers(*)')
-        .eq('id', responseId)
-        .single();
-    return _mapResponse(row);
+    try {
+      final res = await _client.functions.invoke(
+        'submit-feedback',
+        body: {
+          'form_id': formId,
+          'answers': answersByQuestionId,
+          'metadata': metadata,
+          'client_key': key,
+          'submission_id': sid,
+          'turnstile_token': turnstileToken,
+        },
+      );
+      if (res.status >= 400) {
+        final data = res.data;
+        final msg = data is Map && data['error'] != null
+            ? '${data['error']}'
+            : 'Submission failed.';
+        throw _mapSubmitError(msg);
+      }
+      final data = res.data;
+      final id = data is Map ? data['response_id'] as String? : null;
+      if (id == null) {
+        throw const SubmitGuardFailure('Submission failed.');
+      }
+      return FeedbackResponse(
+        id: id,
+        formId: formId,
+        submittedAt: DateTime.now().toUtc(),
+        metadata: metadata,
+        answers: answersByQuestionId.entries
+            .map(
+              (e) => Answer(
+                id: _uuid.v4(),
+                responseId: id,
+                questionId: e.key,
+                value: e.value,
+              ),
+            )
+            .toList(),
+      );
+    } on FunctionException catch (e) {
+      throw _mapSubmitError(e.details?.toString() ?? e.toString());
+    } on SubmitGuardFailure {
+      rethrow;
+    } on PlanLimitFailure {
+      rethrow;
+    } catch (e) {
+      if (e is Exception) throw _mapSubmitError(e.toString());
+      throw _mapSubmitError('$e');
+    }
+  }
+
+  Exception _mapSubmitError(String message) {
+    final limit = planLimitFromError(message);
+    if (limit != null) return limit;
+    final lower = message.toLowerCase();
+    if (lower.contains('rate_limited') || lower.contains('too many')) {
+      return const SubmitGuardFailure(
+        'Too many submissions. Please try again later.',
+      );
+    }
+    if (lower.contains('duplicate')) {
+      return const SubmitGuardFailure(
+        'This response was already submitted.',
+      );
+    }
+    if (lower.contains('invalid_answers') || lower.contains('please answer')) {
+      return SubmitGuardFailure(
+        message.replaceFirst(RegExp(r'^.*INVALID_ANSWERS:\s*'), ''),
+      );
+    }
+    if (lower.contains('turnstile') || lower.contains('captcha')) {
+      return const SubmitGuardFailure(
+        'Captcha verification failed. Please try again.',
+      );
+    }
+    if (message.contains('PLAN_LIMIT')) {
+      return PlanLimitFailure(message);
+    }
+    return SubmitGuardFailure(
+      message.isNotEmpty ? message : 'Submission failed.',
+    );
   }
 
   Future<Map<String, QuestionType>> _questionsForOrg(String orgId) async {
@@ -171,8 +245,10 @@ class SupabaseResponseRepository implements ResponseRepository {
         r.submittedAt.day,
       );
       volume[day] = (volume[day] ?? 0) + 1;
+
       final rating = _valueForType(r, questions, QuestionType.starRating);
       if (rating != null) ratings.add(rating);
+
       final nps = _valueForType(r, questions, QuestionType.nps);
       if (nps != null) {
         npsScores.add(nps);
@@ -180,17 +256,22 @@ class SupabaseResponseRepository implements ResponseRepository {
       }
     }
 
+    double? avgRating;
+    if (ratings.isNotEmpty) {
+      avgRating = ratings.reduce((a, b) => a + b) / ratings.length;
+    }
+
+    double? npsScore;
+    if (npsScores.isNotEmpty) {
+      final promoters = npsScores.where((s) => s >= 9).length;
+      final detractors = npsScores.where((s) => s <= 6).length;
+      npsScore = ((promoters - detractors) / npsScores.length) * 100;
+    }
+
     return DashboardStats(
       totalResponses: responses.length,
-      averageRating: ratings.isEmpty
-          ? null
-          : ratings.reduce((a, b) => a + b) / ratings.length,
-      npsScore: npsScores.isEmpty
-          ? null
-          : ((npsScores.where((s) => s >= 9).length -
-                      npsScores.where((s) => s <= 6).length) /
-                  npsScores.length) *
-              100,
+      averageRating: avgRating,
+      npsScore: npsScore,
       npsDistribution: npsDist,
       volumeByDay: volume,
       responseRateLabel: responses.isEmpty ? 'No responses yet' : 'Live',
@@ -199,20 +280,23 @@ class SupabaseResponseRepository implements ResponseRepository {
 
   FeedbackResponse _mapResponse(Map<String, dynamic> row) {
     final answers = (row['answers'] as List? ?? [])
-        .map(
-          (a) => Answer(
-            id: a['id'] as String,
-            responseId: a['response_id'] as String,
-            questionId: a['question_id'] as String,
-            value: a['value'],
-          ),
-        )
+        .map((a) {
+          final m = a as Map<String, dynamic>;
+          return Answer(
+            id: m['id'] as String,
+            responseId: m['response_id'] as String,
+            questionId: m['question_id'] as String,
+            value: m['value'],
+          );
+        })
         .toList();
     return FeedbackResponse(
       id: row['id'] as String,
       formId: row['form_id'] as String,
       submittedAt: DateTime.parse(row['submitted_at'] as String),
-      metadata: Map<String, dynamic>.from(row['metadata'] as Map? ?? {}),
+      metadata: Map<String, dynamic>.from(
+        (row['metadata'] as Map?) ?? const {},
+      ),
       answers: answers,
     );
   }

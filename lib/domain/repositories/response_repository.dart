@@ -16,5 +16,8 @@ abstract class ResponseRepository {
     required String formId,
     required Map<String, dynamic> answersByQuestionId,
     Map<String, dynamic> metadata = const {},
+    String? clientKey,
+    String? submissionId,
+    String? turnstileToken,
   });
 }

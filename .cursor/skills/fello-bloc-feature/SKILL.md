@@ -1,9 +1,9 @@
 ---
 name: fello-bloc-feature
-description: Implement a Fello feature vertical slice with BLoC, repositories, routes, and tests.
+description: Implement a Kaydo feature vertical slice with BLoC, repositories, routes, and tests.
 ---
 
-# Fello BLoC feature slice
+# Kaydo BLoC feature slice
 
 ## Order of work
 

@@ -7,8 +7,10 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/di/service_locator.dart';
 import '../../../core/theme/fello_colors.dart';
+import '../../../core/theme/fello_typography.dart';
 import '../../../shared/animations/fade_slide_in.dart';
-import '../../../shared/widgets/fello_logo.dart';
+import '../../../shared/widgets/fello_back_button.dart';
+import '../../../shared/widgets/kaydo_toast.dart';
 import '../bloc/forms_bloc.dart';
 
 class FormSharePage extends StatefulWidget {
@@ -43,13 +45,7 @@ class _FormSharePageState extends State<FormSharePage> {
         final link = '$baseUrl/f/${form.slug}';
 
         return Scaffold(
-          appBar: AppBar(
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => context.go('/forms/${form.id}'),
-            ),
-            title: const Text('Share form'),
-          ),
+          backgroundColor: FelloColors.paper,
           body: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
@@ -58,7 +54,17 @@ class _FormSharePageState extends State<FormSharePage> {
                   constraints: const BoxConstraints(maxWidth: 480),
                   child: Column(
                     children: [
-                      const FelloLogo(size: 36),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: FelloBackButton(
+                          onPressed: () => context.go('/forms/${form.id}'),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Share form',
+                        style: FelloTypography.pageTitle(context),
+                      ),
                       const SizedBox(height: 20),
                       Text(form.title, style: theme.textTheme.headlineMedium),
                       const SizedBox(height: 8),
@@ -107,11 +113,10 @@ class _FormSharePageState extends State<FormSharePage> {
                                         ClipboardData(text: link),
                                       );
                                       if (context.mounted) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text('Link copied'),
-                                          ),
+                                        showKaydoToast(
+                                          context,
+                                          message: 'Link copied',
+                                          tone: KaydoToastTone.success,
                                         );
                                       }
                                     },

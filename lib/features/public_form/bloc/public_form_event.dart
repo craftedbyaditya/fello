@@ -28,6 +28,14 @@ final class PublicFormAnswerChanged extends PublicFormEvent {
   List<Object?> get props => [questionId, value];
 }
 
+final class PublicFormTurnstileUpdated extends PublicFormEvent {
+  const PublicFormTurnstileUpdated(this.token);
+  final String? token;
+
+  @override
+  List<Object?> get props => [token];
+}
+
 final class PublicFormSubmitted extends PublicFormEvent {
   const PublicFormSubmitted();
 }

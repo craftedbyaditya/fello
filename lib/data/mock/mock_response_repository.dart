@@ -1,9 +1,13 @@
 import 'package:uuid/uuid.dart';
 
+import '../../domain/auth_permission_failure.dart';
 import '../../domain/entities/dashboard_stats.dart';
 import '../../domain/entities/question.dart';
 import '../../domain/entities/response.dart';
+import '../../domain/plan_limit_failure.dart';
+import '../../domain/public_answer_validator.dart';
 import '../../domain/repositories/response_repository.dart';
+import '../../domain/submit_guard_failure.dart';
 import 'mock_store.dart';
 
 class MockResponseRepository implements ResponseRepository {
@@ -18,6 +22,7 @@ class MockResponseRepository implements ResponseRepository {
     ResponseFilters filters = const ResponseFilters(),
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 220));
+    _assertOrgAccess(orgId);
     return _filtered(orgId, filters);
   }
 
@@ -27,8 +32,18 @@ class MockResponseRepository implements ResponseRepository {
     ResponseFilters filters = const ResponseFilters(),
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 220));
+    _assertOrgAccess(orgId);
     final responses = _filtered(orgId, filters);
     return _computeStats(responses);
+  }
+
+  void _assertOrgAccess(String orgId) {
+    final session = _store.currentSession;
+    if (session != null && session.organization.id != orgId) {
+      throw const AuthPermissionFailure(
+        'You cannot access another organisation’s data.',
+      );
+    }
   }
 
   @override
@@ -36,6 +51,9 @@ class MockResponseRepository implements ResponseRepository {
     required String formId,
     required Map<String, dynamic> answersByQuestionId,
     Map<String, dynamic> metadata = const {},
+    String? clientKey,
+    String? submissionId,
+    String? turnstileToken,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
     final form = _store.forms.firstWhere(
@@ -46,13 +64,53 @@ class MockResponseRepository implements ResponseRepository {
       throw StateError('This form is not accepting responses.');
     }
 
-    for (final q in form.questions.where((q) => q.required)) {
-      final value = answersByQuestionId[q.id];
-      if (value == null ||
-          (value is String && value.trim().isEmpty) ||
-          (value is List && value.isEmpty)) {
-        throw StateError('Please answer: ${q.label}');
+    final sid = submissionId ?? _uuid.v4();
+    if (_store.submitDedupeIds.contains(sid)) {
+      throw const SubmitGuardFailure(
+        'This response was already submitted.',
+      );
+    }
+
+    final key = (clientKey == null || clientKey.isEmpty) ? 'anonymous' : clientKey;
+    final rateKey = '$key|$formId';
+    final now = DateTime.now().toUtc();
+    final window = _store.submitRateWindows[rateKey];
+    if (window == null || now.difference(window.$1) > const Duration(minutes: 10)) {
+      _store.submitRateWindows[rateKey] = (now, 1);
+    } else {
+      final next = window.$2 + 1;
+      _store.submitRateWindows[rateKey] = (window.$1, next);
+      if (next > 20) {
+        throw const SubmitGuardFailure(
+          'Too many submissions. Please try again later.',
+        );
       }
+    }
+
+    final invalid = PublicAnswerValidator.validate(
+      questions: form.questions,
+      answers: answersByQuestionId,
+    );
+    if (invalid != null) {
+      throw SubmitGuardFailure(invalid);
+    }
+
+    final org = _store.organizations.firstWhere((o) => o.id == form.orgId);
+    final periodStart = DateTime.utc(now.year, now.month);
+    final formIds =
+        _store.forms.where((f) => f.orgId == org.id).map((f) => f.id).toSet();
+    final monthCount = _store.responses
+        .where(
+          (r) =>
+              formIds.contains(r.formId) &&
+              !r.submittedAt.toUtc().isBefore(periodStart),
+        )
+        .length;
+    if (!org.plan.allowsAnotherResponse(monthCount)) {
+      throw const PlanLimitFailure(
+        'This workspace has reached its monthly response limit.',
+        upgradeHint: false,
+      );
     }
 
     final responseId = _uuid.v4();
@@ -73,6 +131,7 @@ class MockResponseRepository implements ResponseRepository {
       answers: answers,
     );
     _store.responses.add(response);
+    _store.submitDedupeIds.add(sid);
     return response;
   }
 

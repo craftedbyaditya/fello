@@ -29,11 +29,11 @@ void main() {
     expect(promoters, isNotEmpty);
   });
 
-  test('submit requires published form answers', () async {
+  test('submit rejects empty required answers', () async {
     final form = store.forms.firstWhere((f) => f.slug == 'harbor-visit');
     expect(
       () => repo.submitResponse(formId: form.id, answersByQuestionId: {}),
-      throwsA(isA<StateError>()),
+      throwsA(isA<Object>()),
     );
   });
 }

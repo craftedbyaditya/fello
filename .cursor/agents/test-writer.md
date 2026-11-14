@@ -1,6 +1,6 @@
 # Agent: test-writer
 
-Write focused tests for changed Fello code.
+Write focused tests for changed Kaydo code.
 
 ## Goal
 

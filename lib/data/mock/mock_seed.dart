@@ -1,10 +1,12 @@
 import 'package:uuid/uuid.dart';
 
+import '../../domain/entities/business_type.dart';
 import '../../domain/entities/feedback_form.dart';
 import '../../domain/entities/organization.dart';
 import '../../domain/entities/profile.dart';
 import '../../domain/entities/question.dart';
 import '../../domain/entities/response.dart';
+import '../../domain/entities/subscription_plan.dart';
 
 const _uuid = Uuid();
 
@@ -18,6 +20,9 @@ class MockSeedData {
       name: 'Harbor Coffee',
       slug: 'harbor-coffee',
       createdAt: now.subtract(const Duration(days: 40)),
+      businessType: BusinessType.restaurantCafe,
+      onboardingCompletedAt: now.subtract(const Duration(days: 40)),
+      planId: PlanId.starter,
     );
 
     profile = Profile(
@@ -26,6 +31,7 @@ class MockSeedData {
       displayName: 'Ada Chen',
       email: 'ada@harbor.coffee',
       role: ProfileRole.admin,
+      createdAt: now.subtract(const Duration(days: 40)),
     );
 
     // Demo credentials for mock sign-in

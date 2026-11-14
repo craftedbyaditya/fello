@@ -1,9 +1,9 @@
 ---
 name: fello-supabase-sync
-description: Keep Fello SQL migrations, seed, domain models, and mock/supabase repositories in sync when persistence requirements change.
+description: Keep Kaydo SQL migrations, seed, domain models, and mock/supabase repositories in sync when persistence requirements change.
 ---
 
-# Fello Supabase sync
+# Kaydo Supabase sync
 
 Use this skill whenever a requirement changes schema, RLS, or how data is read/written.
 

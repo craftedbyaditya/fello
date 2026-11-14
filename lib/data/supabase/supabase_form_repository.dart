@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../domain/entities/feedback_form.dart';
 import '../../domain/entities/question.dart';
 import '../../domain/repositories/form_repository.dart';
+import '../plan_limit_messages.dart';
 
 class SupabaseFormRepository implements FormRepository {
   SupabaseFormRepository(this._client);
@@ -36,7 +37,9 @@ class SupabaseFormRepository implements FormRepository {
   Future<FeedbackForm?> getPublishedBySlug(String slug) async {
     final row = await _client
         .from('forms')
-        .select('*, questions(*)')
+        .select(
+          '*, questions(*), organizations(logo_url, show_logo_on_forms, plan_id)',
+        )
         .eq('slug', slug)
         .eq('status', 'published')
         .maybeSingle();
@@ -54,29 +57,35 @@ class SupabaseFormRepository implements FormRepository {
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
         .replaceAll(RegExp(r'^-|-$'), '');
-    final row = await _client
-        .from('forms')
-        .insert({
-          'org_id': orgId,
-          'title': title,
-          'description': description,
-          'slug': slug.isEmpty ? _uuid.v4().substring(0, 8) : slug,
-          'status': 'draft',
-        })
-        .select('*, questions(*)')
-        .single();
-    return _mapForm(row);
+    try {
+      final row = await _client
+          .from('forms')
+          .insert({
+            'org_id': orgId,
+            'title': title,
+            'description': description,
+            'slug': slug.isEmpty ? _uuid.v4().substring(0, 8) : slug,
+            'status': 'draft',
+          })
+          .select('*, questions(*)')
+          .single();
+      return _mapForm(row);
+    } on PostgrestException catch (e) {
+      final limit = planLimitFromError(e.message);
+      if (limit != null) throw limit;
+      rethrow;
+    }
   }
 
   @override
   Future<FeedbackForm> updateForm(FeedbackForm form) async {
+    // Never write status here — publishForm owns draft → published.
     final row = await _client
         .from('forms')
         .update({
           'title': form.title,
           'description': form.description,
           'slug': form.slug,
-          'status': form.status.name,
         })
         .eq('id', form.id)
         .select('*, questions(*)')
@@ -142,6 +151,17 @@ class SupabaseFormRepository implements FormRepository {
         .map((q) => _mapQuestion(q as Map<String, dynamic>))
         .toList()
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final org = row['organizations'];
+    String? logoUrl;
+    var showLogo = false;
+    var allowsLogo = false;
+    if (org is Map) {
+      final raw = (org['logo_url'] as String?)?.trim();
+      logoUrl = (raw == null || raw.isEmpty) ? null : raw;
+      showLogo = org['show_logo_on_forms'] as bool? ?? false;
+      final planId = org['plan_id'] as String?;
+      allowsLogo = planId != null && planId != 'free';
+    }
     return FeedbackForm(
       id: row['id'] as String,
       orgId: row['org_id'] as String,
@@ -153,11 +173,16 @@ class SupabaseFormRepository implements FormRepository {
           : FormStatus.draft,
       createdAt: DateTime.parse(row['created_at'] as String),
       questions: questions,
+      orgLogoUrl: logoUrl,
+      showOrgLogo: showLogo,
+      orgAllowsLogo: allowsLogo,
     );
   }
 
   Question _mapQuestion(Map<String, dynamic> row) {
-    final options = (row['options'] as List? ?? []).cast<String>();
+    final options = (row['options'] as List? ?? [])
+        .map((e) => '$e')
+        .toList(growable: false);
     return Question(
       id: row['id'] as String,
       formId: row['form_id'] as String,

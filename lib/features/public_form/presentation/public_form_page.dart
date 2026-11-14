@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/di/service_locator.dart';
 import '../../../core/theme/fello_colors.dart';
 import '../../../domain/entities/question.dart';
@@ -8,7 +9,9 @@ import '../../../domain/repositories/form_repository.dart';
 import '../../../domain/repositories/response_repository.dart';
 import '../../../shared/animations/fade_slide_in.dart';
 import '../../../shared/widgets/fello_logo.dart';
+import '../../../shared/widgets/fello_text_field.dart';
 import '../../../shared/widgets/pressable_scale.dart';
+import '../../../shared/widgets/turnstile_widget.dart';
 import '../bloc/public_form_bloc.dart';
 
 class PublicFormPage extends StatelessWidget {
@@ -18,35 +21,32 @@ class PublicFormPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final config = getIt<AppConfig>();
     return BlocProvider(
       create: (_) => PublicFormBloc(
         formRepository: getIt<FormRepository>(),
         responseRepository: getIt<ResponseRepository>(),
+        requireTurnstile: config.turnstileEnabled,
       )..add(PublicFormLoadRequested(slug)),
-      child: const _PublicFormView(),
+      child: _PublicFormView(turnstileSiteKey: config.turnstileSiteKey),
     );
   }
 }
 
 class _PublicFormView extends StatelessWidget {
-  const _PublicFormView();
+  const _PublicFormView({required this.turnstileSiteKey});
+
+  final String turnstileSiteKey;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFE7F4F0), FelloColors.mist],
-          ),
-        ),
-        child: SafeArea(
-          child: BlocBuilder<PublicFormBloc, PublicFormState>(
-            builder: (context, state) {
+      backgroundColor: FelloColors.paper,
+      body: SafeArea(
+        child: BlocBuilder<PublicFormBloc, PublicFormState>(
+          builder: (context, state) {
               if (state.status == PublicFormStatus.loading ||
                   state.status == PublicFormStatus.initial) {
                 return const Center(child: CircularProgressIndicator());
@@ -109,7 +109,16 @@ class _PublicFormView extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const FelloLogo(size: 32),
+                            if (form.displaysOrgLogo)
+                              Image.network(
+                                form.orgLogoUrl!,
+                                height: 40,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const FelloLogo(size: 32),
+                              )
+                            else
+                              const FelloLogo(size: 32),
                             const SizedBox(height: 24),
                             Text(
                               form.title,
@@ -148,6 +157,15 @@ class _PublicFormView extends StatelessWidget {
                           ),
                         );
                       }),
+                      if (turnstileSiteKey.isNotEmpty) ...[
+                        TurnstileWidget(
+                          siteKey: turnstileSiteKey,
+                          onToken: (token) => context
+                              .read<PublicFormBloc>()
+                              .add(PublicFormTurnstileUpdated(token)),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       if (state.errorMessage != null) ...[
                         Text(
                           state.errorMessage!,
@@ -188,8 +206,7 @@ class _PublicFormView extends StatelessWidget {
                   ),
                 ),
               );
-            },
-          ),
+          },
         ),
       ),
     );
@@ -294,16 +311,14 @@ class _QuestionCard extends StatelessWidget {
           ],
         );
       case QuestionType.shortText:
-        return TextFormField(
+        return FelloTextField(
           initialValue: value is String ? value as String : '',
-          decoration: const InputDecoration(hintText: 'Your answer'),
           onChanged: onChanged,
         );
       case QuestionType.longText:
-        return TextFormField(
+        return FelloTextField(
           initialValue: value is String ? value as String : '',
           maxLines: 4,
-          decoration: const InputDecoration(hintText: 'Your answer'),
           onChanged: onChanged,
         );
       case QuestionType.yesNo:

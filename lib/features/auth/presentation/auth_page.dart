@@ -1,10 +1,15 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/theme/fello_colors.dart';
 import '../../../shared/animations/fade_slide_in.dart';
 import '../../../shared/widgets/fello_logo.dart';
+import '../../../shared/widgets/fello_text_field.dart';
 import '../bloc/auth_bloc.dart';
 
 class AuthPage extends StatefulWidget {
@@ -18,19 +23,47 @@ class AuthPage extends StatefulWidget {
 
 class _AuthPageState extends State<AuthPage> {
   late bool _signUp = widget.initialSignUp;
-  final _email = TextEditingController(text: 'ada@harbor.coffee');
-  final _password = TextEditingController(text: 'fello123');
-  final _orgName = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
   final _displayName = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  late final TapGestureRecognizer _privacyRecognizer;
+  late final TapGestureRecognizer _termsRecognizer;
+  late final TapGestureRecognizer _toggleRecognizer;
+
+  @override
+  void initState() {
+    super.initState();
+    _privacyRecognizer = TapGestureRecognizer()
+      ..onTap = () => context.push('/privacy');
+    _termsRecognizer = TapGestureRecognizer()
+      ..onTap = () => context.push('/terms');
+    _toggleRecognizer = TapGestureRecognizer()..onTap = _toggleMode;
+    _applyModeDefaults();
+  }
 
   @override
   void dispose() {
+    _privacyRecognizer.dispose();
+    _termsRecognizer.dispose();
+    _toggleRecognizer.dispose();
     _email.dispose();
     _password.dispose();
-    _orgName.dispose();
     _displayName.dispose();
     super.dispose();
+  }
+
+  void _applyModeDefaults() {
+    _email.clear();
+    _password.clear();
+    _displayName.clear();
+  }
+
+  void _toggleMode() {
+    setState(() {
+      _signUp = !_signUp;
+      _applyModeDefaults();
+    });
   }
 
   void _submit() {
@@ -40,7 +73,6 @@ class _AuthPageState extends State<AuthPage> {
             AuthSignUpSubmitted(
               email: _email.text,
               password: _password.text,
-              organizationName: _orgName.text,
               displayName: _displayName.text,
             ),
           );
@@ -56,8 +88,6 @@ class _AuthPageState extends State<AuthPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return BlocConsumer<AuthBloc, AuthState>(
       listenWhen: (p, c) =>
           p.status != c.status || p.errorMessage != c.errorMessage,
@@ -73,173 +103,362 @@ class _AuthPageState extends State<AuthPage> {
       builder: (context, state) {
         final loading = state.status == AuthStatus.loading;
         return Scaffold(
-          body: DecoratedBox(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFFE8F5F1),
-                  FelloColors.mist,
-                  Color(0xFFF0F4F2),
-                ],
+          backgroundColor: FelloColors.paper,
+          body: Row(
+            children: [
+              const Expanded(
+                flex: 30,
+                child: _AuthArtPanel(),
               ),
-            ),
-            child: SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 32,
+              Expanded(
+                flex: 70,
+                child: ColoredBox(
+                  color: FelloColors.paper,
+                  child: SafeArea(
+                    child: _AuthFormPanel(
+                      signUp: _signUp,
+                      loading: loading,
+                      formKey: _formKey,
+                      email: _email,
+                      password: _password,
+                      displayName: _displayName,
+                      errorMessage: state.errorMessage,
+                      onSubmit: _submit,
+                      privacyRecognizer: _privacyRecognizer,
+                      termsRecognizer: _termsRecognizer,
+                      toggleRecognizer: _toggleRecognizer,
+                    ),
                   ),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 440),
-                    child: FadeSlideIn(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const FelloLogo(size: 44),
-                          const SizedBox(height: 28),
-                          Text(
-                            _signUp
-                                ? 'Start collecting clearer feedback'
-                                : 'Welcome back',
-                            style: theme.textTheme.displayMedium?.copyWith(
-                              fontSize: 34,
-                            ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AuthArtPanel extends StatelessWidget {
+  const _AuthArtPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: FelloColors.paper,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Image.asset(
+          'assets/images/auth_panel.jpg',
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+          alignment: Alignment.center,
+        ),
+      ),
+    );
+  }
+}
+
+class _AuthFormPanel extends StatelessWidget {
+  const _AuthFormPanel({
+    required this.signUp,
+    required this.loading,
+    required this.formKey,
+    required this.email,
+    required this.password,
+    required this.displayName,
+    required this.errorMessage,
+    required this.onSubmit,
+    required this.privacyRecognizer,
+    required this.termsRecognizer,
+    required this.toggleRecognizer,
+  });
+
+  final bool signUp;
+  final bool loading;
+  final GlobalKey<FormState> formKey;
+  final TextEditingController email;
+  final TextEditingController password;
+  final TextEditingController displayName;
+  final String? errorMessage;
+  final VoidCallback onSubmit;
+  final TapGestureRecognizer privacyRecognizer;
+  final TapGestureRecognizer termsRecognizer;
+  final TapGestureRecognizer toggleRecognizer;
+
+  @override
+  Widget build(BuildContext context) {
+    final titleStyle = GoogleFonts.poppins(
+      fontSize: 28,
+      fontWeight: FontWeight.w600,
+      color: FelloColors.ink,
+      height: 1.2,
+      letterSpacing: -0.4,
+    );
+    final subtitleStyle = GoogleFonts.poppins(
+      fontSize: 15,
+      fontWeight: FontWeight.w400,
+      fontStyle: FontStyle.italic,
+      color: FelloColors.accent,
+      height: 1.5,
+    );
+    final finePrintStyle = GoogleFonts.poppins(
+      fontSize: 12.5,
+      fontWeight: FontWeight.w400,
+      color: FelloColors.inkSoft,
+      height: 1.5,
+    );
+    final creditStyle = GoogleFonts.poppins(
+      fontSize: 11,
+      fontWeight: FontWeight.w400,
+      color: FelloColors.inkSoft.withValues(alpha: 0.72),
+      height: 1.4,
+      letterSpacing: 0.1,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 28),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: FadeSlideIn(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: FelloLogo(size: 36),
+                      ),
+                      const SizedBox(height: 40),
+                      Text(
+                        signUp
+                            ? 'Create your organisation'
+                            : 'Sign in to Kaydo',
+                        style: titleStyle,
+                      ),
+                      if (!signUp) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          'See what your customers are saying.',
+                          style: subtitleStyle,
+                        ),
+                      ],
+                      const SizedBox(height: 36),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(28, 28, 28, 24),
+                        decoration: BoxDecoration(
+                          color: FelloColors.paper,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: FelloColors.accentLime,
+                            width: 0.8,
                           ),
-                          const SizedBox(height: 10),
-                          Text(
-                            _signUp
-                                ? 'Create your organisation account. Customers never need to sign in.'
-                                : 'Sign in to your Fello workspace. Demo: ada@harbor.coffee / fello123',
-                            style: theme.textTheme.bodyLarge,
-                          ),
-                          const SizedBox(height: 28),
-                          Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: FelloColors.paper.withValues(alpha: 0.9),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: FelloColors.border),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: FelloColors.ink.withValues(alpha: 0.04),
-                                  blurRadius: 24,
-                                  offset: const Offset(0, 12),
+                        ),
+                        child: Form(
+                          key: formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (signUp) ...[
+                                FelloTextField(
+                                  label: 'Full name',
+                                  controller: displayName,
+                                  textCapitalization: TextCapitalization.words,
+                                  textInputAction: TextInputAction.next,
+                                  validator: (v) =>
+                                      v == null || v.trim().isEmpty
+                                          ? 'Enter your name'
+                                          : null,
+                                ),
+                                const SizedBox(height: 20),
+                              ],
+                              FelloTextField(
+                                label: 'Work email',
+                                controller: email,
+                                keyboardType: TextInputType.emailAddress,
+                                textInputAction: TextInputAction.next,
+                                autofillHints: const [AutofillHints.email],
+                                validator: (v) =>
+                                    v == null || !v.contains('@')
+                                        ? 'Enter a valid email'
+                                        : null,
+                              ),
+                              const SizedBox(height: 20),
+                              FelloTextField(
+                                label: 'Password',
+                                controller: password,
+                                obscureText: true,
+                                showObscureToggle: true,
+                                textInputAction: TextInputAction.done,
+                                onFieldSubmitted: (_) => onSubmit(),
+                                autofillHints: [
+                                  if (signUp)
+                                    AutofillHints.newPassword
+                                  else
+                                    AutofillHints.password,
+                                ],
+                                validator: (v) => v == null || v.length < 6
+                                    ? 'Use at least 6 characters'
+                                    : null,
+                              ),
+                              if (errorMessage != null) ...[
+                                const SizedBox(height: 16),
+                                Text(
+                                  errorMessage!,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: FelloColors.danger,
+                                    height: 1.4,
+                                  ),
                                 ),
                               ],
-                            ),
-                            child: Form(
-                              key: _formKey,
-                              child: Column(
-                                children: [
-                                  if (_signUp) ...[
-                                    TextFormField(
-                                      controller: _orgName,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Organisation name',
-                                      ),
-                                      validator: (v) =>
-                                          v == null || v.trim().isEmpty
-                                              ? 'Required'
-                                              : null,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                      controller: _displayName,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Your name',
-                                      ),
-                                      validator: (v) =>
-                                          v == null || v.trim().isEmpty
-                                              ? 'Required'
-                                              : null,
-                                    ),
-                                    const SizedBox(height: 12),
-                                  ],
-                                  TextFormField(
-                                    controller: _email,
-                                    keyboardType: TextInputType.emailAddress,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Work email',
-                                    ),
-                                    validator: (v) =>
-                                        v == null || !v.contains('@')
-                                            ? 'Enter a valid email'
-                                            : null,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  TextFormField(
-                                    controller: _password,
-                                    obscureText: true,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Password',
-                                    ),
-                                    validator: (v) =>
-                                        v == null || v.length < 6
-                                            ? 'Min 6 characters'
-                                            : null,
-                                  ),
-                                  if (state.errorMessage != null) ...[
-                                    const SizedBox(height: 12),
-                                    Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Text(
-                                        state.errorMessage!,
-                                        style: theme.textTheme.bodyMedium
-                                            ?.copyWith(color: FelloColors.danger),
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 20),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: FilledButton(
-                                      onPressed: loading ? null : _submit,
-                                      child: loading
-                                          ? const SizedBox(
-                                              height: 18,
-                                              width: 18,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: Colors.white,
-                                              ),
-                                            )
-                                          : Text(
-                                              _signUp
-                                                  ? 'Create account'
-                                                  : 'Sign in',
-                                            ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  TextButton(
+                              if (!signUp) ...[
+                                const SizedBox(height: 12),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton(
                                     onPressed: loading
                                         ? null
-                                        : () => setState(
-                                              () => _signUp = !_signUp,
-                                            ),
+                                        : () => context.go('/forgot-password'),
                                     child: Text(
-                                      _signUp
-                                          ? 'Already have an account? Sign in'
-                                          : 'New organisation? Create account',
+                                      'Forgot password?',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: FelloColors.accentDeep,
+                                      ),
                                     ),
                                   ),
-                                ],
+                                ),
+                              ],
+                              const SizedBox(height: 28),
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton(
+                                  onPressed: loading ? null : onSubmit,
+                                  child: loading
+                                      ? const SizedBox(
+                                          height: 18,
+                                          width: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : Text(
+                                          signUp ? 'Create account' : 'Sign in',
+                                        ),
+                                ),
                               ),
-                            ),
+                              const SizedBox(height: 20),
+                              Text.rich(
+                                TextSpan(
+                                  style: finePrintStyle,
+                                  children: [
+                                    TextSpan(
+                                      text: signUp
+                                          ? 'Already have an account? '
+                                          : 'New organisation? ',
+                                    ),
+                                    TextSpan(
+                                      text: signUp
+                                          ? 'Sign in'
+                                          : 'Create an account',
+                                      style: finePrintStyle.copyWith(
+                                        color: FelloColors.accentDeep,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      recognizer:
+                                          loading ? null : toggleRecognizer,
+                                    ),
+                                  ],
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 28),
+                      Text.rich(
+                        TextSpan(
+                          style: finePrintStyle,
+                          children: [
+                            const TextSpan(
+                              text: 'By continuing, you agree to our ',
+                            ),
+                            TextSpan(
+                              text: 'Terms of Service',
+                              style: finePrintStyle.copyWith(
+                                color: FelloColors.ink,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
+                                decorationColor: FelloColors.border,
+                              ),
+                              recognizer: termsRecognizer,
+                            ),
+                            const TextSpan(text: ' and '),
+                            TextSpan(
+                              text: 'Privacy Policy',
+                              style: finePrintStyle.copyWith(
+                                color: FelloColors.ink,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
+                                decorationColor: FelloColors.border,
+                              ),
+                              recognizer: privacyRecognizer,
+                            ),
+                          ],
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
           ),
-        );
-      },
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(40, 8, 40, 20),
+          child: Row(
+            children: [
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () {
+                    launchUrl(
+                      Uri.parse('https://sayge.in'),
+                      webOnlyWindowName: '_blank',
+                    );
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Powered by', style: creditStyle),
+                      const SizedBox(width: 6),
+                      Image.asset(
+                        'assets/images/sayge_logo.png',
+                        height: 16,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Text('v${AppConfig.appVersion}', style: creditStyle),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

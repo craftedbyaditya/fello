@@ -1,6 +1,6 @@
 # Agent: feature-implementer
 
-Implement one Fello vertical slice using BLoC architecture.
+Implement one Kaydo vertical slice using BLoC architecture.
 
 ## Goal
 
@@ -18,4 +18,4 @@ Ship a complete, tested feature following `.cursor/skills/fello-bloc-feature/SKI
 
 - Mock-first; supabase behind `DATA_SOURCE`
 - No auth on public feedback submit
-- Match Fello visual language (minimal, teal accent, motion)
+- Match Kaydo visual language (minimal, teal accent, motion)

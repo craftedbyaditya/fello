@@ -1,6 +1,6 @@
 # Agent: sql-migrator
 
-You maintain Fello’s Supabase schema and every dependent file.
+You maintain Kaydo’s Supabase schema and every dependent file.
 
 ## Goal
 

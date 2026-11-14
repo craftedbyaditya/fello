@@ -14,6 +14,9 @@ class FeedbackForm extends Equatable {
     required this.status,
     required this.createdAt,
     this.questions = const [],
+    this.orgLogoUrl,
+    this.showOrgLogo = false,
+    this.orgAllowsLogo = false,
   });
 
   final String id;
@@ -24,8 +27,19 @@ class FeedbackForm extends Equatable {
   final FormStatus status;
   final DateTime createdAt;
   final List<Question> questions;
+  final String? orgLogoUrl;
+  final bool showOrgLogo;
+
+  /// Paid-plan gate mirrored from the org (free plans never display).
+  final bool orgAllowsLogo;
 
   bool get isPublished => status == FormStatus.published;
+
+  bool get displaysOrgLogo =>
+      orgAllowsLogo &&
+      showOrgLogo &&
+      orgLogoUrl != null &&
+      orgLogoUrl!.trim().isNotEmpty;
 
   FeedbackForm copyWith({
     String? id,
@@ -36,6 +50,10 @@ class FeedbackForm extends Equatable {
     FormStatus? status,
     DateTime? createdAt,
     List<Question>? questions,
+    String? orgLogoUrl,
+    bool? showOrgLogo,
+    bool? orgAllowsLogo,
+    bool clearOrgLogoUrl = false,
   }) {
     return FeedbackForm(
       id: id ?? this.id,
@@ -46,10 +64,25 @@ class FeedbackForm extends Equatable {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       questions: questions ?? this.questions,
+      orgLogoUrl:
+          clearOrgLogoUrl ? null : (orgLogoUrl ?? this.orgLogoUrl),
+      showOrgLogo: showOrgLogo ?? this.showOrgLogo,
+      orgAllowsLogo: orgAllowsLogo ?? this.orgAllowsLogo,
     );
   }
 
   @override
-  List<Object?> get props =>
-      [id, orgId, title, description, slug, status, createdAt, questions];
+  List<Object?> get props => [
+        id,
+        orgId,
+        title,
+        description,
+        slug,
+        status,
+        createdAt,
+        questions,
+        orgLogoUrl,
+        showOrgLogo,
+        orgAllowsLogo,
+      ];
 }

@@ -1,0 +1,22 @@
+# Minimal Supabase CLI config for Kaydo.
+# Link your cloud project: `supabase link --project-ref <ref>`
+# Push schema: `supabase db push`
+
+project_id = "kaydo"
+
+[api]
+enabled = true
+
+[db]
+major_version = 15
+
+[auth]
+enabled = true
+site_url = "https://kaydo.sayge.in"
+additional_redirect_urls = ["https://kaydo.sayge.in/**", "http://localhost:3847/**"]
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+# For production launches, keep confirmations on unless you intentionally disable them.
+enable_confirmations = true

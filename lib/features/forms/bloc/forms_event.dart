@@ -47,11 +47,11 @@ final class FormUpdated extends FormsEvent {
 }
 
 final class FormPublishRequested extends FormsEvent {
-  const FormPublishRequested(this.formId);
-  final String formId;
+  const FormPublishRequested(this.form);
+  final FeedbackForm form;
 
   @override
-  List<Object?> get props => [formId];
+  List<Object?> get props => [form];
 }
 
 final class FormDeleteRequested extends FormsEvent {

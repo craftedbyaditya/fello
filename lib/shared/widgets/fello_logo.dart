@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
-import '../../core/theme/fello_colors.dart';
-
+/// Official Kaydo wordmark + mark asset.
 class FelloLogo extends StatelessWidget {
   const FelloLogo({
     super.key,
@@ -10,45 +8,22 @@ class FelloLogo extends StatelessWidget {
     this.showWordmark = true,
   });
 
+  /// Height of the logo image.
   final double size;
+
+  /// Kept for API compatibility; the asset already includes the wordmark.
   final bool showWordmark;
+
+  static const String _assetPath = 'assets/images/kaydo_logo.png';
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: FelloColors.accent,
-            borderRadius: BorderRadius.circular(size * 0.28),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            'F',
-            style: GoogleFonts.fraunces(
-              color: Colors.white,
-              fontSize: size * 0.55,
-              fontWeight: FontWeight.w700,
-              height: 1,
-            ),
-          ),
-        ),
-        if (showWordmark) ...[
-          SizedBox(width: size * 0.35),
-          Text(
-            'Fello',
-            style: GoogleFonts.fraunces(
-              fontSize: size * 0.72,
-              fontWeight: FontWeight.w600,
-              color: FelloColors.ink,
-              height: 1,
-            ),
-          ),
-        ],
-      ],
+    return Image.asset(
+      _assetPath,
+      height: size * 2,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
+      alignment: Alignment.centerLeft,
     );
   }
 }

@@ -1,0 +1,21 @@
+# Hostinger / Apache SPA fallback for Flutter web (path URLs).
+# Ensures /dashboard, /f/<slug>, etc. load index.html on refresh.
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Serve real files and directories as-is.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Everything else → Flutter entrypoint.
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# Optional: force HTTPS if Hostinger SSL is active.
+# <IfModule mod_rewrite.c>
+#   RewriteCond %{HTTPS} !=on
+#   RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# </IfModule>

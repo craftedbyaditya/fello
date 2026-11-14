@@ -1,13 +1,22 @@
--- Seed mirrors lib/data/mock/mock_seed.dart for local/demo parity.
--- Note: profiles require auth.users rows. Prefer mock mode for UI demos,
--- or create ada@harbor.coffee via Auth then map IDs below.
+-- DEMO ONLY — do NOT run against production.
+-- Production Kaydo starts with an empty database; users sign up for real.
+-- This seed mirrors historical mock fixtures for optional local smoke tests.
 
 -- Demo organisation + published form (safe to run in empty projects for schema smoke tests)
-insert into public.organizations (id, name, slug, created_at)
+insert into public.organizations (
+  id,
+  name,
+  slug,
+  created_at,
+  business_type,
+  onboarding_completed_at
+)
 values (
   '11111111-1111-1111-1111-111111111111',
   'Harbor Coffee',
   'harbor-coffee',
+  now() - interval '40 days',
+  'restaurant_cafe',
   now() - interval '40 days'
 )
 on conflict (id) do nothing;

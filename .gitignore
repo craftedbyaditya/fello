@@ -31,7 +31,14 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+/public/
 /coverage/
+
+# Local secrets for production builds
+.env
+.env.local
+.env.production
+.env.*.local
 
 # Symbolication related
 app.*.symbols
@@ -46,3 +53,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# FVM Version Cache
+.fvm/

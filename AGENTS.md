@@ -1,6 +1,6 @@
-# Fello agent rules
+# Kaydo agent rules
 
-Product: **Fello** — Flutter web-first feedback platform with Supabase.
+Product: **Kaydo** — Flutter web-first feedback platform with Supabase.
 
 ## Architecture
 
@@ -29,4 +29,4 @@ Follow `.cursor/skills/fello-bloc-feature/SKILL.md` and prefer the agent briefs 
 
 - Production-grade Dart: null-safety, clear errors, loading/empty states.
 - `flutter analyze` clean; bloc/unit tests for changed logic.
-- Keep UX minimal: Fello brand, teal/charcoal theme, intentional motion.
+- Keep UX minimal: Kaydo brand, teal/charcoal theme, intentional motion.

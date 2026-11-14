@@ -2,15 +2,21 @@ import 'package:get_it/get_it.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../data/mock/mock_auth_repository.dart';
+import '../../data/mock/mock_billing_repository.dart';
 import '../../data/mock/mock_form_repository.dart';
 import '../../data/mock/mock_response_repository.dart';
 import '../../data/mock/mock_store.dart';
+import '../../data/mock/mock_team_repository.dart';
 import '../../data/supabase/supabase_auth_repository.dart';
+import '../../data/supabase/supabase_billing_repository.dart';
 import '../../data/supabase/supabase_form_repository.dart';
 import '../../data/supabase/supabase_response_repository.dart';
+import '../../data/supabase/supabase_team_repository.dart';
 import '../../domain/repositories/auth_repository.dart';
+import '../../domain/repositories/billing_repository.dart';
 import '../../domain/repositories/form_repository.dart';
 import '../../domain/repositories/response_repository.dart';
+import '../../domain/repositories/team_repository.dart';
 import '../config/app_config.dart';
 
 final getIt = GetIt.instance;
@@ -34,6 +40,12 @@ Future<void> configureDependencies(AppConfig config) async {
     getIt.registerLazySingleton<ResponseRepository>(
       () => MockResponseRepository(store),
     );
+    getIt.registerLazySingleton<TeamRepository>(
+      () => MockTeamRepository(store),
+    );
+    getIt.registerLazySingleton<BillingRepository>(
+      () => MockBillingRepository(store),
+    );
   } else {
     if (config.supabaseUrl.isEmpty || config.supabaseAnonKey.isEmpty) {
       throw StateError(
@@ -54,6 +66,12 @@ Future<void> configureDependencies(AppConfig config) async {
     );
     getIt.registerLazySingleton<ResponseRepository>(
       () => SupabaseResponseRepository(client),
+    );
+    getIt.registerLazySingleton<TeamRepository>(
+      () => SupabaseTeamRepository(client),
+    );
+    getIt.registerLazySingleton<BillingRepository>(
+      () => SupabaseBillingRepository(client),
     );
   }
 }

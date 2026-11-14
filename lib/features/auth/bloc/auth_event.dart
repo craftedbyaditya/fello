@@ -32,18 +32,17 @@ final class AuthSignUpSubmitted extends AuthEvent {
   const AuthSignUpSubmitted({
     required this.email,
     required this.password,
-    required this.organizationName,
     required this.displayName,
+    this.inviteToken,
   });
 
   final String email;
   final String password;
-  final String organizationName;
   final String displayName;
+  final String? inviteToken;
 
   @override
-  List<Object?> get props =>
-      [email, password, organizationName, displayName];
+  List<Object?> get props => [email, password, displayName, inviteToken];
 }
 
 final class AuthSignOutRequested extends AuthEvent {
@@ -51,5 +50,38 @@ final class AuthSignOutRequested extends AuthEvent {
 }
 
 final class AuthOnboardingCompleted extends AuthEvent {
-  const AuthOnboardingCompleted();
+  const AuthOnboardingCompleted({
+    required this.organizationName,
+    this.businessType,
+  });
+
+  final String organizationName;
+  final BusinessType? businessType;
+
+  @override
+  List<Object?> get props => [organizationName, businessType];
+}
+
+final class AuthOrganizationUpdated extends AuthEvent {
+  const AuthOrganizationUpdated(this.organization);
+  final Organization organization;
+
+  @override
+  List<Object?> get props => [organization];
+}
+
+final class AuthPasswordResetRequested extends AuthEvent {
+  const AuthPasswordResetRequested({required this.email});
+  final String email;
+
+  @override
+  List<Object?> get props => [email];
+}
+
+final class AuthPasswordUpdateRequested extends AuthEvent {
+  const AuthPasswordUpdateRequested({required this.newPassword});
+  final String newPassword;
+
+  @override
+  List<Object?> get props => [newPassword];
 }

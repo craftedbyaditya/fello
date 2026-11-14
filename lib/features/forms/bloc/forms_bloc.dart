@@ -1,8 +1,10 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../domain/auth_permission_failure.dart';
 import '../../../domain/entities/feedback_form.dart';
 import '../../../domain/entities/question.dart';
+import '../../../domain/plan_limit_failure.dart';
 import '../../../domain/repositories/form_repository.dart';
 
 part 'forms_event.dart';
@@ -71,6 +73,13 @@ class FormsBloc extends Bloc<FormsEvent, FormsState> {
           selected: form,
         ),
       );
+    } on PlanLimitFailure catch (e) {
+      emit(
+        state.copyWith(
+          status: FormsStatus.failure,
+          errorMessage: e.message,
+        ),
+      );
     } catch (e) {
       emit(
         state.copyWith(
@@ -120,7 +129,10 @@ class FormsBloc extends Bloc<FormsEvent, FormsState> {
   ) async {
     emit(state.copyWith(status: FormsStatus.saving, clearError: true));
     try {
-      final published = await _formRepository.publishForm(event.formId);
+      // Save title/description first, then publish — same handler so a
+      // concurrent FormUpdated cannot overwrite status back to draft.
+      await _formRepository.updateForm(event.form);
+      final published = await _formRepository.publishForm(event.form.id);
       final forms = await _formRepository.listForms(published.orgId);
       emit(
         state.copyWith(
@@ -146,15 +158,32 @@ class FormsBloc extends Bloc<FormsEvent, FormsState> {
   ) async {
     final orgId = state.orgId;
     if (orgId == null) return;
-    await _formRepository.deleteForm(event.formId);
-    final forms = await _formRepository.listForms(orgId);
-    emit(
-      state.copyWith(
-        status: FormsStatus.ready,
-        forms: forms,
-        clearSelected: state.selected?.id == event.formId,
-      ),
-    );
+    emit(state.copyWith(status: FormsStatus.saving, clearError: true));
+    try {
+      await _formRepository.deleteForm(event.formId);
+      final forms = await _formRepository.listForms(orgId);
+      emit(
+        state.copyWith(
+          status: FormsStatus.ready,
+          forms: forms,
+          clearSelected: state.selected?.id == event.formId,
+        ),
+      );
+    } on AuthPermissionFailure catch (e) {
+      emit(
+        state.copyWith(
+          status: FormsStatus.ready,
+          errorMessage: e.message,
+        ),
+      );
+    } catch (e) {
+      emit(
+        state.copyWith(
+          status: FormsStatus.ready,
+          errorMessage: e.toString(),
+        ),
+      );
+    }
   }
 
   Future<void> _onUpsertQuestion(
@@ -191,8 +220,25 @@ class FormsBloc extends Bloc<FormsEvent, FormsState> {
   ) async {
     final formId = state.selected?.id;
     if (formId == null) return;
-    await _formRepository.deleteQuestion(event.questionId);
-    final form = await _formRepository.getForm(formId);
-    emit(state.copyWith(status: FormsStatus.ready, selected: form));
+    emit(state.copyWith(status: FormsStatus.saving, clearError: true));
+    try {
+      await _formRepository.deleteQuestion(event.questionId);
+      final form = await _formRepository.getForm(formId);
+      emit(state.copyWith(status: FormsStatus.ready, selected: form));
+    } on AuthPermissionFailure catch (e) {
+      emit(
+        state.copyWith(
+          status: FormsStatus.ready,
+          errorMessage: e.message,
+        ),
+      );
+    } catch (e) {
+      emit(
+        state.copyWith(
+          status: FormsStatus.ready,
+          errorMessage: e.toString(),
+        ),
+      );
+    }
   }
 }

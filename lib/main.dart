@@ -9,20 +9,56 @@ import 'core/router/app_router.dart';
 import 'core/theme/fello_theme.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'features/auth/bloc/auth_bloc.dart';
+import 'shared/widgets/web_desktop_only_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (kIsWeb) {
-    // Hash URLs work on static hosts without rewrite rules.
-    setUrlStrategy(const HashUrlStrategy());
+    // Clean paths for kaydo.sayge.in share links (/f/:slug). Hosting must
+    // rewrite unknown routes to index.html (see deploy/ and web/_redirects).
+    usePathUrlStrategy();
   }
+
   final config = AppConfig.fromEnvironment();
-  await configureDependencies(config);
+  try {
+    config.validate();
+    await configureDependencies(config);
+  } catch (e) {
+    runApp(_BootErrorApp(message: '$e'));
+    return;
+  }
 
   final authBloc = AuthBloc(getIt<AuthRepository>())
     ..add(const AuthSubscriptionRequested());
 
   runApp(FelloApp(authBloc: authBloc));
+}
+
+class _BootErrorApp extends StatelessWidget {
+  const _BootErrorApp({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, height: 1.45),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class FelloApp extends StatelessWidget {
@@ -37,10 +73,11 @@ class FelloApp extends StatelessWidget {
     return BlocProvider.value(
       value: authBloc,
       child: MaterialApp.router(
-        title: 'Fello',
+        title: 'Kaydo',
         debugShowCheckedModeBanner: false,
         theme: FelloTheme.light(),
         routerConfig: router,
+        builder: (context, child) => WebDesktopOnlyGate(child: child),
       ),
     );
   }

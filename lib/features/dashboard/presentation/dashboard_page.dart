@@ -1,17 +1,25 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../../core/di/service_locator.dart';
 import '../../../core/theme/fello_colors.dart';
+import '../../../core/theme/fello_typography.dart';
 import '../../../domain/entities/dashboard_stats.dart';
 import '../../../domain/entities/feedback_form.dart';
 import '../../../domain/entities/question.dart';
 import '../../../domain/entities/response.dart';
+import '../../../domain/onboarding/starter_form_template.dart';
+import '../../../domain/plan_limit_failure.dart';
+import '../../../domain/repositories/form_repository.dart';
 import '../../../shared/animations/fade_slide_in.dart';
+import '../../../shared/widgets/kaydo_toast.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../bloc/dashboard_bloc.dart';
+import 'widgets/setup_checklist.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -21,8 +29,8 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  int _rangeMonths = 12;
-  int _tabIndex = 0;
+  bool _exploring = false;
+  bool _creatingForm = false;
 
   @override
   void initState() {
@@ -32,110 +40,228 @@ class _DashboardPageState extends State<DashboardPage> {
 
   void _load() {
     final orgId = context.read<AuthBloc>().state.session?.organization.id;
-    if (orgId != null) {
-      context.read<DashboardBloc>().add(DashboardLoadRequested(orgId));
-    }
-  }
-
-  void _applyRange(int months) {
-    setState(() => _rangeMonths = months);
-    final filters = context.read<DashboardBloc>().state.filters;
-    if (months <= 0) {
-      context.read<DashboardBloc>().add(
-            DashboardFiltersChanged(filters.copyWith(clearFrom: true)),
-          );
+    if (orgId == null) return;
+    final dash = context.read<DashboardBloc>().state;
+    // Avoid duplicate loads; still refresh when org changes (e.g. after auth).
+    if (dash.orgId == orgId &&
+        (dash.status == DashboardStatus.loading ||
+            dash.status == DashboardStatus.ready)) {
       return;
     }
-    final from = DateTime.now().subtract(Duration(days: months * 30));
-    context.read<DashboardBloc>().add(
-          DashboardFiltersChanged(filters.copyWith(from: from)),
+    context.read<DashboardBloc>().add(DashboardLoadRequested(orgId));
+  }
+
+  Future<void> _createFirstForm() async {
+    if (_creatingForm) return;
+    final session = context.read<AuthBloc>().state.session;
+    if (session == null) return;
+
+    setState(() => _creatingForm = true);
+    try {
+      final template = StarterFormTemplate.forBusinessType(
+        session.organization.businessType,
+      );
+      final repo = getIt<FormRepository>();
+      final form = await repo.createForm(
+        orgId: session.organization.id,
+        title: template.title,
+        description: template.description,
+      );
+      const uuid = Uuid();
+      for (var i = 0; i < template.questions.length; i++) {
+        final draft = template.questions[i];
+        await repo.upsertQuestion(
+          Question(
+            id: uuid.v4(),
+            formId: form.id,
+            type: draft.type,
+            label: draft.label,
+            required: draft.required,
+            sortOrder: i,
+          ),
         );
+      }
+      if (!mounted) return;
+      context.go('/forms/${form.id}');
+    } on PlanLimitFailure catch (e) {
+      if (!mounted) return;
+      setState(() => _creatingForm = false);
+      showKaydoToast(
+        context,
+        message: e.message,
+        tone: KaydoToastTone.error,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _creatingForm = false);
+      showKaydoToast(
+        context,
+        message: "Couldn't create your form. Please try again.",
+        tone: KaydoToastTone.error,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<DashboardBloc, DashboardState>(
-      builder: (context, state) {
-        if (state.status == DashboardStatus.loading && state.stats == null) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (state.status == DashboardStatus.failure && state.stats == null) {
-          return Center(child: Text(state.errorMessage ?? 'Failed to load'));
-        }
+    return BlocListener<AuthBloc, AuthState>(
+      listenWhen: (previous, current) =>
+          previous.session?.organization.id !=
+          current.session?.organization.id,
+      listener: (context, authState) {
+        // Full page refresh: auth restores after the first frame, so reload then.
+        if (authState.session != null) _load();
+      },
+      child: BlocBuilder<DashboardBloc, DashboardState>(
+        builder: (context, state) {
+          final session = context.watch<AuthBloc>().state.session;
+          final waitingForAuthOrData = session == null ||
+              state.status == DashboardStatus.initial ||
+              (state.status == DashboardStatus.loading &&
+                  state.forms.isEmpty &&
+                  state.stats == null);
 
-        final stats = state.stats;
-        final analytics = _DashboardAnalytics.from(
-          responses: state.responses,
-          forms: state.forms,
-          stats: stats,
-        );
+          if (waitingForAuthOrData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (state.status == DashboardStatus.failure &&
+              state.stats == null &&
+              state.forms.isEmpty) {
+            return Center(
+              child: Text(state.errorMessage ?? 'Failed to load'),
+            );
+          }
+
+          final stats = state.stats;
+          final analytics = _DashboardAnalytics.from(
+            responses: state.responses,
+            forms: state.forms,
+            stats: stats,
+          );
+          final progress = SetupProgress.fromForms(
+            state.forms,
+            hasLogo: session.organization.hasLogo,
+          );
+          final showWelcome = state.forms.isEmpty && !_exploring;
+          final isAdmin = session.profile.isAdmin;
 
         return ColoredBox(
-          color: FelloColors.mist,
+          color: FelloColors.paper,
           child: RefreshIndicator(
             onRefresh: () async => _load(),
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(28, 28, 28, 12),
-                  sliver: SoftToBox(
+                if (showWelcome) ...[
+                  SoftPadding(
+                    padding: const EdgeInsets.fromLTRB(28, 28, 28, 12),
                     child: FadeSlideIn(
-                      child: _Header(
-                        rangeMonths: _rangeMonths,
-                        onRangeChanged: _applyRange,
-                        forms: state.forms,
-                        filters: state.filters,
-                        onFiltersChanged: (f) => context
-                            .read<DashboardBloc>()
-                            .add(DashboardFiltersChanged(f)),
+                      child: FirstTimeWelcome(
+                        creating: _creatingForm,
+                        onCreateForm: _createFirstForm,
+                        onExplore: () => setState(() => _exploring = true),
                       ),
                     ),
                   ),
-                ),
-                SoftPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 28),
-                  child: FadeSlideIn(
-                    delay: const Duration(milliseconds: 40),
-                    child: _Tabs(
-                      index: _tabIndex,
-                      onChanged: (i) => setState(() => _tabIndex = i),
-                      formChips: state.forms.take(3).map((f) => f.title).toList(),
-                    ),
-                  ),
-                ),
-                if (stats != null) ...[
                   SoftPadding(
-                    padding: const EdgeInsets.fromLTRB(28, 18, 28, 0),
+                    padding: const EdgeInsets.fromLTRB(28, 0, 28, 36),
                     child: FadeSlideIn(
-                      delay: const Duration(milliseconds: 80),
-                      child: _KpiRow(analytics: analytics),
-                    ),
-                  ),
-                  SoftPadding(
-                    padding: const EdgeInsets.fromLTRB(28, 16, 28, 0),
-                    child: FadeSlideIn(
-                      delay: const Duration(milliseconds: 120),
-                      child: _ChartsRow(analytics: analytics),
-                    ),
-                  ),
-                  SoftPadding(
-                    padding: const EdgeInsets.fromLTRB(28, 16, 28, 36),
-                    child: FadeSlideIn(
-                      delay: const Duration(milliseconds: 160),
-                      child: _BottomRow(
-                        analytics: analytics,
-                        forms: state.forms,
-                        responses: state.responses,
+                      delay: const Duration(milliseconds: 60),
+                      child: SetupChecklistCard(
+                        progress: progress,
+                        onCreateForm: _creatingForm ? null : _createFirstForm,
+                        onInviteTeam:
+                            isAdmin ? () => context.go('/team') : null,
+                        onAddLogo:
+                            isAdmin ? () => context.go('/settings/logo') : null,
                       ),
                     ),
                   ),
+                ] else ...[
+                  SoftPadding(
+                    padding: const EdgeInsets.fromLTRB(28, 28, 28, 12),
+                    child: FadeSlideIn(
+                      child: _DashboardGreeting(
+                        userName: session.profile.displayName,
+                      ),
+                    ),
+                  ),
+                  if (progress.showChecklist)
+                    SoftPadding(
+                      padding: const EdgeInsets.fromLTRB(28, 0, 28, 12),
+                      child: FadeSlideIn(
+                        delay: const Duration(milliseconds: 30),
+                        child: SetupChecklistCard(
+                          progress: progress,
+                          onCreateForm:
+                              _creatingForm ? null : _createFirstForm,
+                          onInviteTeam:
+                              isAdmin ? () => context.go('/team') : null,
+                          onAddLogo: isAdmin
+                              ? () => context.go('/settings/logo')
+                              : null,
+                        ),
+                      ),
+                    ),
+                  if (stats != null) ...[
+                    SoftPadding(
+                      padding: const EdgeInsets.fromLTRB(28, 18, 28, 0),
+                      child: FadeSlideIn(
+                        delay: const Duration(milliseconds: 80),
+                        child: _KpiRow(analytics: analytics),
+                      ),
+                    ),
+                    if (state.forms.length > 1)
+                      SoftPadding(
+                        padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
+                        child: FadeSlideIn(
+                          delay: const Duration(milliseconds: 120),
+                          child: _FormTilesSection(
+                            forms: state.forms,
+                            responses: state.responses,
+                          ),
+                        ),
+                      )
+                    else
+                      const SoftPadding(
+                        padding: EdgeInsets.only(bottom: 36),
+                        child: SizedBox.shrink(),
+                      ),
+                  ],
                 ],
               ],
             ),
           ),
         );
-      },
+        },
+      ),
+    );
+  }
+}
+
+class _DashboardGreeting extends StatelessWidget {
+  const _DashboardGreeting({required this.userName});
+
+  final String userName;
+
+  String get _firstName {
+    final parts = userName.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return 'there';
+    return parts.first;
+  }
+
+  String get _salutation {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FelloPageHeader(
+      title: '$_salutation, $_firstName',
+      subtitle: "Here's what your customers are saying.",
     );
   }
 }
@@ -333,356 +459,234 @@ class _HeatRow {
   final List<double?> values;
 }
 
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.rangeMonths,
-    required this.onRangeChanged,
-    required this.forms,
-    required this.filters,
-    required this.onFiltersChanged,
+class _FormTileStats {
+  const _FormTileStats({
+    required this.form,
+    required this.totalReviews,
+    required this.avgRating,
+    required this.positivePct,
+    required this.negativePct,
   });
 
-  final int rangeMonths;
-  final ValueChanged<int> onRangeChanged;
+  final FeedbackForm form;
+  final int totalReviews;
+  final double? avgRating;
+  final double positivePct;
+  final double negativePct;
+
+  static _FormTileStats from({
+    required FeedbackForm form,
+    required List<FeedbackResponse> responses,
+  }) {
+    final formResponses =
+        responses.where((r) => r.formId == form.id).toList(growable: false);
+    var promoters = 0;
+    var detractors = 0;
+    var scored = 0;
+    final ratings = <double>[];
+
+    for (final response in formResponses) {
+      for (final answer in response.answers) {
+        for (final question in form.questions) {
+          if (question.id != answer.questionId || answer.value is! num) {
+            continue;
+          }
+          final value = (answer.value as num).toDouble();
+          if (question.type == QuestionType.nps) {
+            scored++;
+            final nps = value.round();
+            if (nps >= 9) {
+              promoters++;
+            } else if (nps <= 6) {
+              detractors++;
+            }
+            ratings.add(value);
+          } else if (question.type == QuestionType.starRating) {
+            ratings.add(value);
+          }
+        }
+      }
+    }
+
+    return _FormTileStats(
+      form: form,
+      totalReviews: formResponses.length,
+      avgRating: ratings.isEmpty
+          ? null
+          : ratings.reduce((a, b) => a + b) / ratings.length,
+      positivePct: scored == 0 ? 0 : (promoters / scored) * 100,
+      negativePct: scored == 0 ? 0 : (detractors / scored) * 100,
+    );
+  }
+}
+
+class _FormTilesSection extends StatelessWidget {
+  const _FormTilesSection({
+    required this.forms,
+    required this.responses,
+  });
+
   final List<FeedbackForm> forms;
-  final ResponseFilters filters;
-  final ValueChanged<ResponseFilters> onFiltersChanged;
+  final List<FeedbackResponse> responses;
 
   @override
   Widget build(BuildContext context) {
+    final tiles = forms
+        .map((form) => _FormTileStats.from(form: form, responses: responses))
+        .toList(growable: false);
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wrap = constraints.maxWidth < 860;
-        final title = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Dashboard',
-              style: GoogleFonts.dmSans(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                color: FelloColors.ink,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Customer feedback overview for the selected period.',
-              style: GoogleFonts.dmSans(
-                fontSize: 14,
-                color: FelloColors.inkSoft,
-              ),
-            ),
-          ],
-        );
+        final width = constraints.maxWidth;
+        final columns = width >= 1100
+            ? 3
+            : width >= 720
+                ? 2
+                : 1;
+        final gap = 14.0;
+        final tileWidth = columns == 1
+            ? width
+            : (width - gap * (columns - 1)) / columns;
 
-        final controls = Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
           children: [
-            _RangePills(selected: rangeMonths, onChanged: onRangeChanged),
-            _GhostButton(
-              icon: Icons.tune_rounded,
-              label: 'Filters',
-              onTap: () => _openFilters(context),
-            ),
-            FilledButton.icon(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Presentation mode coming soon')),
-                );
-              },
-              icon: const Icon(Icons.slideshow_outlined, size: 18),
-              label: const Text('Presentation mode'),
-              style: FilledButton.styleFrom(
-                backgroundColor: FelloColors.accent,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(999),
-                ),
+            for (final tile in tiles)
+              SizedBox(
+                width: tileWidth,
+                child: _FormTile(stats: tile),
               ),
-            ),
-          ],
-        );
-
-        if (wrap) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [title, const SizedBox(height: 16), controls],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: title),
-            controls,
           ],
         );
       },
     );
   }
+}
 
-  Future<void> _openFilters(BuildContext context) async {
-    String? formId = filters.formId;
-    String? npsBand = filters.npsBand;
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: FelloColors.paper,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setLocal) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+class _FormTile extends StatelessWidget {
+  const _FormTile({required this.stats});
+
+  final _FormTileStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: FelloColors.paper,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: () => context.go('/dashboard/reviews/${stats.form.id}'),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+          decoration: BoxDecoration(
+            color: FelloColors.paper,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: FelloColors.accentLime, width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                stats.form.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: FelloColors.ink,
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                stats.form.isPublished ? 'Published' : 'Draft',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: FelloColors.inkSoft,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
                 children: [
-                  Text(
-                    'Filters',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
+                  Expanded(
+                    child: _FormTileMetric(
+                      label: 'Reviews',
+                      value: '${stats.totalReviews}',
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String?>(
-                    // ignore: deprecated_member_use
-                    value: formId,
-                    decoration: const InputDecoration(labelText: 'Form'),
-                    items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('All forms'),
-                      ),
-                      ...forms.map(
-                        (f) =>
-                            DropdownMenuItem(value: f.id, child: Text(f.title)),
-                      ),
-                    ],
-                    onChanged: (v) => setLocal(() => formId = v),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String?>(
-                    // ignore: deprecated_member_use
-                    value: npsBand,
-                    decoration: const InputDecoration(labelText: 'NPS band'),
-                    items: const [
-                      DropdownMenuItem(value: null, child: Text('All')),
-                      DropdownMenuItem(
-                        value: 'promoter',
-                        child: Text('Promoters'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'passive',
-                        child: Text('Passives'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'detractor',
-                        child: Text('Detractors'),
-                      ),
-                    ],
-                    onChanged: (v) => setLocal(() => npsBand = v),
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: () {
-                      onFiltersChanged(
-                        filters.copyWith(
-                          formId: formId,
-                          npsBand: npsBand,
-                          clearFormId: formId == null,
-                          clearNpsBand: npsBand == null,
-                        ),
-                      );
-                      Navigator.pop(context);
-                    },
-                    child: const Text('Apply filters'),
+                  Expanded(
+                    child: _FormTileMetric(
+                      label: 'Avg rating',
+                      value: stats.avgRating == null
+                          ? '—'
+                          : stats.avgRating!.toStringAsFixed(1),
+                    ),
                   ),
                 ],
               ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-class _RangePills extends StatelessWidget {
-  const _RangePills({required this.selected, required this.onChanged});
-
-  final int selected;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    const options = [(3, '3 months'), (6, '6 months'), (12, '12 months'), (0, 'All')];
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: FelloColors.paper,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: FelloColors.border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final (months, label) in options)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: InkWell(
-                onTap: () => onChanged(months),
-                borderRadius: BorderRadius.circular(999),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: selected == months
-                        ? FelloColors.accentSoft
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight:
-                          selected == months ? FontWeight.w700 : FontWeight.w500,
-                      color: selected == months
-                          ? FelloColors.accentDeep
-                          : FelloColors.inkSoft,
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _FormTileMetric(
+                      label: 'Positive',
+                      value: '${stats.positivePct.round()}%',
+                      valueColor: FelloColors.accent,
                     ),
                   ),
-                ),
+                  Expanded(
+                    child: _FormTileMetric(
+                      label: 'Negative',
+                      value: '${stats.negativePct.round()}%',
+                      valueColor: FelloColors.danger,
+                    ),
+                  ),
+                ],
               ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GhostButton extends StatelessWidget {
-  const _GhostButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon, size: 18),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: FelloColors.ink,
-        side: const BorderSide(color: FelloColors.border),
-        backgroundColor: FelloColors.paper,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-      ),
-    );
-  }
-}
-
-class _Tabs extends StatelessWidget {
-  const _Tabs({
-    required this.index,
-    required this.onChanged,
-    required this.formChips,
-  });
-
-  final int index;
-  final ValueChanged<int> onChanged;
-  final List<String> formChips;
-
-  @override
-  Widget build(BuildContext context) {
-    const tabs = ['Overview', 'Forms', 'Responses', 'Comments'];
-    return Row(
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (var i = 0; i < tabs.length; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 18),
-                    child: InkWell(
-                      onTap: () => onChanged(i),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            tabs[i],
-                            style: TextStyle(
-                              fontWeight:
-                                  index == i ? FontWeight.w700 : FontWeight.w500,
-                              color: index == i
-                                  ? FelloColors.ink
-                                  : FelloColors.inkSoft,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            height: 2,
-                            width: 28,
-                            color: index == i
-                                ? FelloColors.accent
-                                : Colors.transparent,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            ],
           ),
         ),
-        if (formChips.isNotEmpty)
-          Flexible(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              reverse: true,
-              child: Row(
-                children: [
-                  for (final chip in formChips)
-                    Container(
-                      margin: const EdgeInsets.only(left: 8),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: FelloColors.paper,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: FelloColors.border),
-                      ),
-                      child: Text(
-                        chip,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: FelloColors.inkSoft,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+      ),
+    );
+  }
+}
+
+class _FormTileMetric extends StatelessWidget {
+  const _FormTileMetric({
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: FelloColors.inkSoft,
           ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: GoogleFonts.poppins(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: valueColor ?? FelloColors.ink,
+            height: 1.1,
+          ),
+        ),
       ],
     );
   }
@@ -698,14 +702,6 @@ class _KpiRow extends StatelessWidget {
       builder: (context, constraints) {
         final cards = [
           _KpiCard(
-            label: 'Overall NPS',
-            value: analytics.nps == null
-                ? '—'
-                : analytics.nps!.round().toString(),
-            delta: analytics.npsDelta,
-            dark: true,
-          ),
-          _KpiCard(
             label: 'Avg rating',
             value: analytics.avgRating == null
                 ? '—'
@@ -713,15 +709,20 @@ class _KpiRow extends StatelessWidget {
             delta: analytics.ratingDelta,
           ),
           _KpiCard(
-            label: 'Responses',
-            value: '${analytics.totalResponses}',
+            label: 'Positive',
+            value: '${analytics.promoters}',
             delta: analytics.completionDelta,
           ),
           _KpiCard(
-            label: 'Response rate',
-            value: analytics.completionRate == 0
-                ? analytics.responseRate
-                : '${analytics.completionRate.round()}%',
+            label: 'Responses',
+            value: '${analytics.totalResponses}',
+            delta: analytics.responseDelta.abs() > 0
+                ? analytics.completionDelta
+                : 2,
+          ),
+          _KpiCard(
+            label: 'Needs attention',
+            value: '${analytics.detractors}',
             delta: analytics.responseDelta,
           ),
         ];
@@ -760,196 +761,17 @@ class _KpiCard extends StatelessWidget {
     required this.label,
     required this.value,
     required this.delta,
-    this.dark = false,
   });
 
   final String label;
   final String value;
   final int delta;
-  final bool dark;
 
   @override
   Widget build(BuildContext context) {
     final up = delta >= 0;
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-      decoration: BoxDecoration(
-        color: dark ? FelloColors.navy : FelloColors.paper,
-        borderRadius: BorderRadius.circular(18),
-        border: dark ? null : Border.all(color: FelloColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: FelloColors.ink.withValues(alpha: 0.03),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: dark ? Colors.white70 : FelloColors.inkSoft,
-              fontWeight: FontWeight.w500,
-              fontSize: 13,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                value,
-                style: GoogleFonts.dmSans(
-                  fontSize: 36,
-                  fontWeight: FontWeight.w700,
-                  height: 1,
-                  color: dark ? Colors.white : FelloColors.ink,
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: up
-                      ? (dark
-                          ? Colors.white.withValues(alpha: 0.14)
-                          : FelloColors.accentSoft)
-                      : (dark
-                          ? const Color(0x33E85D4C)
-                          : const Color(0x14E85D4C)),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '${up ? '+' : ''}$delta pts',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: up
-                        ? (dark ? Colors.white : FelloColors.accentDeep)
-                        : (dark ? const Color(0xFFFFB4A8) : FelloColors.danger),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChartsRow extends StatelessWidget {
-  const _ChartsRow({required this.analytics});
-  final _DashboardAnalytics analytics;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final stack = constraints.maxWidth < 980;
-        final bar = _Panel(
-          title: 'NPS by month',
-          child: SizedBox(
-            height: 260,
-            child: _NpsMonthChart(
-              values: analytics.npsByMonth,
-              labels: analytics.monthLabels,
-            ),
-          ),
-        );
-        final dist = _Panel(
-          title: 'Score distribution',
-          child: SizedBox(
-            height: 260,
-            child: _DistributionPanel(analytics: analytics),
-          ),
-        );
-
-        if (stack) {
-          return Column(
-            children: [
-              bar,
-              const SizedBox(height: 12),
-              dist,
-            ],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(flex: 7, child: bar),
-            const SizedBox(width: 12),
-            Expanded(flex: 4, child: dist),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _BottomRow extends StatelessWidget {
-  const _BottomRow({
-    required this.analytics,
-    required this.forms,
-    required this.responses,
-  });
-
-  final _DashboardAnalytics analytics;
-  final List<FeedbackForm> forms;
-  final List<FeedbackResponse> responses;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final stack = constraints.maxWidth < 980;
-        final heat = _Panel(
-          title: 'NPS by form and month',
-          child: _Heatmap(
-            rows: analytics.heatmap,
-            labels: analytics.monthLabels,
-          ),
-        );
-        final comments = _Panel(
-          title: 'Recent comments',
-          child: _CommentsList(forms: forms, responses: responses),
-        );
-        if (stack) {
-          return Column(
-            children: [
-              heat,
-              const SizedBox(height: 12),
-              comments,
-            ],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(flex: 7, child: heat),
-            const SizedBox(width: 12),
-            Expanded(flex: 4, child: comments),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _Panel extends StatelessWidget {
-  const _Panel({required this.title, required this.child});
-
-  final String title;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       decoration: BoxDecoration(
         color: FelloColors.paper,
         borderRadius: BorderRadius.circular(18),
@@ -963,478 +785,53 @@ class _Panel extends StatelessWidget {
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            title,
-            style: GoogleFonts.dmSans(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: FelloColors.ink,
+            label,
+            style: const TextStyle(
+              color: FelloColors.inkSoft,
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
             ),
           ),
           const SizedBox(height: 14),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _NpsMonthChart extends StatelessWidget {
-  const _NpsMonthChart({required this.values, required this.labels});
-
-  final List<double?> values;
-  final List<String> labels;
-
-  @override
-  Widget build(BuildContext context) {
-    if (values.every((v) => v == null)) {
-      return const Center(child: Text('No NPS data in this period'));
-    }
-
-    var highlight = values.length - 1;
-    for (var i = values.length - 1; i >= 0; i--) {
-      if (values[i] != null) {
-        highlight = i;
-        break;
-      }
-    }
-
-    return BarChart(
-      BarChartData(
-        maxY: 100,
-        minY: -100,
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          getDrawingHorizontalLine: (v) => FlLine(
-            color: FelloColors.border.withValues(alpha: 0.8),
-            strokeWidth: 1,
-          ),
-        ),
-        borderData: FlBorderData(show: false),
-        titlesData: FlTitlesData(
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 36,
-              interval: 50,
-              getTitlesWidget: (value, meta) => Text(
-                value.toInt().toString(),
-                style: const TextStyle(fontSize: 10, color: FelloColors.inkSoft),
-              ),
-            ),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (value, meta) {
-                final i = value.toInt();
-                if (i < 0 || i >= labels.length) {
-                  return const SizedBox.shrink();
-                }
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    labels[i],
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight:
-                          i == highlight ? FontWeight.w700 : FontWeight.w500,
-                      color: i == highlight
-                          ? FelloColors.accentDeep
-                          : FelloColors.inkSoft,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-        barGroups: [
-          for (var i = 0; i < values.length; i++)
-            BarChartGroupData(
-              x: i,
-              barRods: [
-                BarChartRodData(
-                  toY: values[i] ?? 0,
-                  width: 18,
-                  borderRadius: BorderRadius.circular(8),
-                  color: i == highlight
-                      ? FelloColors.accent
-                      : FelloColors.chartMuted,
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DistributionPanel extends StatelessWidget {
-  const _DistributionPanel({required this.analytics});
-  final _DashboardAnalytics analytics;
-
-  @override
-  Widget build(BuildContext context) {
-    final total =
-        analytics.promoters + analytics.passives + analytics.detractors;
-    final p = total == 0 ? 0.0 : analytics.promoters / total;
-    final n = total == 0 ? 0.0 : analytics.passives / total;
-    final d = total == 0 ? 0.0 : analytics.detractors / total;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          total == 0
-              ? 'No scores yet'
-              : '${analytics.recommendPct.round()}% would recommend',
-          style: GoogleFonts.dmSans(
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            color: FelloColors.ink,
-            height: 1.15,
-          ),
-        ),
-        const SizedBox(height: 18),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(999),
-          child: SizedBox(
-            height: 14,
-            child: Row(
-              children: [
-                Expanded(
-                  flex: (p * 1000).round().clamp(0, 1000),
-                  child: Container(color: FelloColors.accent),
-                ),
-                Expanded(
-                  flex: (n * 1000).round().clamp(0, 1000),
-                  child: Container(color: FelloColors.chartMuted),
-                ),
-                Expanded(
-                  flex: (d * 1000).round().clamp(0, 1000),
-                  child: Container(color: FelloColors.navySoft),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 20),
-        _LegendRow(
-          color: FelloColors.accent,
-          label: 'Promoters',
-          value: analytics.promoters,
-        ),
-        const SizedBox(height: 10),
-        _LegendRow(
-          color: FelloColors.chartMuted,
-          label: 'Passives',
-          value: analytics.passives,
-        ),
-        const SizedBox(height: 10),
-        _LegendRow(
-          color: FelloColors.navySoft,
-          label: 'Detractors',
-          value: analytics.detractors,
-        ),
-      ],
-    );
-  }
-}
-
-class _LegendRow extends StatelessWidget {
-  const _LegendRow({
-    required this.color,
-    required this.label,
-    required this.value,
-  });
-
-  final Color color;
-  final String label;
-  final int value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(color: FelloColors.inkSoft),
-          ),
-        ),
-        Text(
-          '$value',
-          style: const TextStyle(
-            fontWeight: FontWeight.w700,
-            color: FelloColors.ink,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Heatmap extends StatelessWidget {
-  const _Heatmap({required this.rows, required this.labels});
-
-  final List<_HeatRow> rows;
-  final List<String> labels;
-
-  @override
-  Widget build(BuildContext context) {
-    if (rows.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Text('Publish a form to see the heatmap.'),
-      );
-    }
-
-    Color cellColor(double? value) {
-      if (value == null) return FelloColors.mist;
-      final t = ((value + 100) / 200).clamp(0.0, 1.0);
-      return Color.lerp(
-        FelloColors.accentSoft,
-        FelloColors.accentDeep,
-        t,
-      )!;
-    }
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
           Row(
-            children: [
-              const SizedBox(width: 140),
-              for (final label in labels)
-                SizedBox(
-                  width: 44,
-                  child: Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: FelloColors.inkSoft,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          for (final row in rows) ...[
-            Row(
-              children: [
-                SizedBox(
-                  width: 140,
-                  child: Text(
-                    row.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: FelloColors.ink,
-                    ),
-                  ),
-                ),
-                for (final value in row.values)
-                  Container(
-                    width: 40,
-                    height: 28,
-                    margin: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: cellColor(value),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      value == null ? '' : value.round().toString(),
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: value == null
-                            ? Colors.transparent
-                            : (value > 20
-                                ? Colors.white
-                                : FelloColors.accentDeep),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _CommentsList extends StatelessWidget {
-  const _CommentsList({required this.forms, required this.responses});
-
-  final List<FeedbackForm> forms;
-  final List<FeedbackResponse> responses;
-
-  @override
-  Widget build(BuildContext context) {
-    final formById = {for (final f in forms) f.id: f};
-    final items = <_CommentItem>[];
-
-    for (final r in responses) {
-      final form = formById[r.formId];
-      String? comment;
-      int? nps;
-      for (final a in r.answers) {
-        final q = form?.questions
-            .cast<Question?>()
-            .firstWhere((q) => q?.id == a.questionId, orElse: () => null);
-        if (q == null) continue;
-        if ((q.type == QuestionType.longText ||
-                q.type == QuestionType.shortText) &&
-            a.value is String &&
-            (a.value as String).trim().isNotEmpty) {
-          comment = a.value as String;
-        }
-        if (q.type == QuestionType.nps && a.value is num) {
-          nps = (a.value as num).toInt();
-        }
-      }
-      if (comment != null) {
-        items.add(
-          _CommentItem(
-            name: 'Customer',
-            meta: form?.title ?? 'Form',
-            comment: comment,
-            score: nps,
-          ),
-        );
-      }
-    }
-
-    if (items.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(12),
-        child: Text('No written comments yet.'),
-      );
-    }
-
-    final shown = items.take(5).toList();
-    return Column(
-      children: [
-        for (var i = 0; i < shown.length; i++) ...[
-          _CommentTile(item: shown[i]),
-          if (i < shown.length - 1) const Divider(height: 20),
-        ],
-      ],
-    );
-  }
-}
-
-class _CommentItem {
-  const _CommentItem({
-    required this.name,
-    required this.meta,
-    required this.comment,
-    required this.score,
-  });
-
-  final String name;
-  final String meta;
-  final String comment;
-  final int? score;
-}
-
-class _CommentTile extends StatelessWidget {
-  const _CommentTile({required this.item});
-  final _CommentItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final scoreColor = item.score == null
-        ? FelloColors.chartMuted
-        : item.score! >= 9
-            ? FelloColors.accent
-            : item.score! >= 7
-                ? FelloColors.warning
-                : FelloColors.danger;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        CircleAvatar(
-          radius: 16,
-          backgroundColor: FelloColors.accentSoft,
-          child: Text(
-            item.name.isEmpty ? 'C' : item.name[0].toUpperCase(),
-            style: const TextStyle(
-              color: FelloColors.accentDeep,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                item.name,
-                style: const TextStyle(
+                value,
+                style: GoogleFonts.poppins(
+                  fontSize: 36,
                   fontWeight: FontWeight.w700,
+                  height: 1,
                   color: FelloColors.ink,
                 ),
               ),
-              Text(
-                item.meta,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: FelloColors.inkSoft,
+              const Spacer(),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: up
+                      ? FelloColors.accentSoft
+                      : const Color(0x14E85D4C),
+                  borderRadius: BorderRadius.circular(999),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                item.comment,
-                style: const TextStyle(
-                  color: FelloColors.inkSoft,
-                  height: 1.35,
+                child: Text(
+                  '${up ? '+' : ''}$delta pts',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: up ? FelloColors.accentDeep : FelloColors.danger,
+                  ),
                 ),
               ),
             ],
           ),
-        ),
-        if (item.score != null)
-          Container(
-            margin: const EdgeInsets.only(left: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: scoreColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              '${item.score}',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                color: scoreColor,
-              ),
-            ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
+

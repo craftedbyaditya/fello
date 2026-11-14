@@ -3,8 +3,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/fello_colors.dart';
+import '../../../core/theme/fello_metrics.dart';
+import '../../../core/theme/fello_typography.dart';
 import '../../../domain/entities/feedback_form.dart';
 import '../../../shared/animations/fade_slide_in.dart';
+import '../../../shared/widgets/kaydo_search_field.dart';
 import '../../../shared/widgets/pressable_scale.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../bloc/forms_bloc.dart';
@@ -17,116 +20,108 @@ class FormsListPage extends StatefulWidget {
 }
 
 class _FormsListPageState extends State<FormsListPage> {
+  final _search = TextEditingController();
+  String _query = '';
+
   @override
   void initState() {
     super.initState();
-    final orgId = context.read<AuthBloc>().state.session?.organization.id;
-    if (orgId != null) {
-      context.read<FormsBloc>().add(FormsLoadRequested(orgId));
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  Future<void> _createForm() async {
+  void _load() {
     final orgId = context.read<AuthBloc>().state.session?.organization.id;
     if (orgId == null) return;
-    final title = TextEditingController();
-    final description = TextEditingController();
-    final created = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('New feedback form'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: title,
-              decoration: const InputDecoration(labelText: 'Title'),
-              autofocus: true,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: description,
-              decoration: const InputDecoration(labelText: 'Description'),
-              maxLines: 3,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (title.text.trim().isEmpty) return;
-              Navigator.pop(context, true);
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-    if (created == true && mounted) {
-      context.read<FormsBloc>().add(
-            FormCreateRequested(
-              orgId: orgId,
-              title: title.text,
-              description: description.text,
-            ),
-          );
+    final formsState = context.read<FormsBloc>().state;
+    if (formsState.orgId == orgId &&
+        (formsState.status == FormsStatus.loading ||
+            formsState.status == FormsStatus.ready)) {
+      return;
     }
-    title.dispose();
-    description.dispose();
+    context.read<FormsBloc>().add(FormsLoadRequested(orgId));
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  List<FeedbackForm> _filtered(List<FeedbackForm> forms) {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return forms;
+    return forms.where((form) {
+      final status = form.isPublished ? 'published' : 'draft';
+      return form.title.toLowerCase().contains(q) ||
+          form.description.toLowerCase().contains(q) ||
+          form.slug.toLowerCase().contains(q) ||
+          status.contains(q);
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final pad = FelloTypography.pagePadding(context);
 
-    return BlocConsumer<FormsBloc, FormsState>(
-      listenWhen: (p, c) =>
-          p.status == FormsStatus.saving &&
-          c.status == FormsStatus.ready &&
-          c.selected != null,
+    return BlocListener<AuthBloc, AuthState>(
+      listenWhen: (previous, current) =>
+          previous.session?.organization.id !=
+          current.session?.organization.id,
       listener: (context, state) {
-        final selected = state.selected;
-        if (selected != null) {
-          context.go('/forms/${selected.id}');
-        }
+        if (state.session != null) _load();
       },
-      builder: (context, state) {
+      child: BlocBuilder<FormsBloc, FormsState>(
+        builder: (context, state) {
+          final filtered = _filtered(state.forms);
+
         return Scaffold(
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: _createForm,
-            icon: const Icon(Icons.add),
-            label: const Text('New form'),
-          ),
+          backgroundColor: FelloColors.paper,
           body: CustomScrollView(
             slivers: [
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+                padding: EdgeInsets.fromLTRB(pad, pad, pad, 8),
                 sliver: SliverToBoxAdapter(
                   child: FadeSlideIn(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Forms', style: theme.textTheme.headlineLarge),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Build questions, publish, then share a link or QR code.',
-                          style: theme.textTheme.bodyLarge,
-                        ),
-                      ],
+                    child: FelloPageHeader(
+                      title: 'Survey',
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            height: FelloMetrics.controlHeight,
+                            child: FilledButton.icon(
+                              onPressed: () => context.go('/forms/new'),
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('New survey'),
+                            ),
+                          ),
+                          if (state.forms.isNotEmpty) ...[
+                            const SizedBox(width: 12),
+                            KaydoSearchField(
+                              controller: _search,
+                              hintText: 'Search surveys',
+                              onChanged: (value) =>
+                                  setState(() => _query = value),
+                              onClear: () {
+                                _search.clear();
+                                setState(() => _query = '');
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
               if (state.status == FormsStatus.loading && state.forms.isEmpty)
-                const SliverFillRemaining(
+                const SoftFillRemaining(
                   child: Center(child: CircularProgressIndicator()),
                 )
               else if (state.forms.isEmpty)
-                SliverFillRemaining(
+                SoftFillRemaining(
                   hasScrollBody: false,
                   child: Center(
                     child: FadeSlideIn(
@@ -135,20 +130,51 @@ class _FormsListPageState extends State<FormsListPage> {
                         children: [
                           const Icon(
                             Icons.dynamic_form_outlined,
-                            size: 48,
+                            size: 40,
                             color: FelloColors.chartMuted,
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 10),
                           Text(
-                            'No forms yet',
-                            style: theme.textTheme.titleLarge,
+                            'No surveys yet',
+                            style: theme.textTheme.titleMedium,
                           ),
-                          const SizedBox(height: 8),
-                          const Text('Create your first feedback form.'),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Create your first feedback survey.',
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 14),
                           FilledButton(
-                            onPressed: _createForm,
-                            child: const Text('Create form'),
+                            onPressed: () => context.go('/forms/new'),
+                            child: const Text('Create survey'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              else if (filtered.isEmpty)
+                SoftFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: FadeSlideIn(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.search_off_rounded,
+                            size: 40,
+                            color: FelloColors.chartMuted,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'No surveys match your search',
+                            style: theme.textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Try a different title, description, or status.',
+                            style: theme.textTheme.bodyMedium,
                           ),
                         ],
                       ),
@@ -157,12 +183,13 @@ class _FormsListPageState extends State<FormsListPage> {
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 100),
+                  padding: EdgeInsets.fromLTRB(pad, 4, pad, 100),
                   sliver: SliverList.separated(
-                    itemCount: state.forms.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 12),
+                    itemCount: filtered.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 8),
                     itemBuilder: (context, index) {
-                      final form = state.forms[index];
+                      final form = filtered[index];
                       return FadeSlideIn(
                         delay: Duration(milliseconds: 40 * index),
                         child: PressableScale(
@@ -176,7 +203,27 @@ class _FormsListPageState extends State<FormsListPage> {
             ],
           ),
         );
-      },
+        },
+      ),
+    );
+  }
+}
+
+class SoftFillRemaining extends StatelessWidget {
+  const SoftFillRemaining({
+    super.key,
+    required this.child,
+    this.hasScrollBody = true,
+  });
+
+  final Widget child;
+  final bool hasScrollBody;
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverFillRemaining(
+      hasScrollBody: hasScrollBody,
+      child: child,
     );
   }
 }
@@ -188,13 +235,17 @@ class _FormTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final published = form.isPublished;
+    final compact = FelloTypography.isCompact(context);
     return Container(
-      padding: const EdgeInsets.all(20),
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 14 : 16,
+        vertical: compact ? 12 : 14,
+      ),
       decoration: BoxDecoration(
         color: FelloColors.paper,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: FelloColors.border),
       ),
       child: Row(
@@ -203,39 +254,45 @@ class _FormTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(form.title, style: theme.textTheme.titleLarge),
-                const SizedBox(height: 4),
+                Text(
+                  form.title,
+                  style: FelloTypography.listTitle(context),
+                ),
+                const SizedBox(height: 2),
                 Text(
                   form.description.isEmpty
                       ? '${form.questions.length} questions'
                       : form.description,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium,
+                  style: FelloTypography.listBody(context),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 12),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: published
-                  ? FelloColors.accentSoft
-                  : FelloColors.mist,
-              borderRadius: BorderRadius.circular(8),
+              color: published ? FelloColors.accentSoft : FelloColors.paper,
+              borderRadius: BorderRadius.circular(6),
+              border: published
+                  ? null
+                  : Border.all(color: FelloColors.border),
             ),
             child: Text(
               published ? 'Published' : 'Draft',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: published
-                    ? FelloColors.accentDeep
-                    : FelloColors.inkSoft,
+              style: FelloTypography.chip(context).copyWith(
+                color: published ? FelloColors.accentDeep : FelloColors.inkSoft,
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          const Icon(Icons.chevron_right, color: FelloColors.chartMuted),
+          const SizedBox(width: 6),
+          Icon(
+            Icons.chevron_right,
+            size: compact ? 18 : 20,
+            color: FelloColors.chartMuted,
+          ),
         ],
       ),
     );

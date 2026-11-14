@@ -1,6 +1,6 @@
-# Fello
+# Kaydo
 
-Fello helps organisations collect feedback through shareable forms (web link + QR). Customers submit without an account. Organisations get a dashboard with filters and charts.
+Kaydo helps organisations collect feedback through shareable forms (web link + QR). Customers submit without an account. Organisations get a dashboard with filters and charts.
 
 ## Stack
 
@@ -9,42 +9,21 @@ Fello helps organisations collect feedback through shareable forms (web link + Q
 - Supabase schema/migrations (optional at runtime)
 - Mock data layer by default for fast local demos
 
-## Quick start (mock)
+## Quick start (Supabase — production path)
+
+Kaydo defaults to **real Supabase data** (no mock).
+
+1. Follow **`deploy/SUPABASE_SETUP.md`** (create project, run migrations, copy keys).
+2. Configure env and run:
 
 ```bash
-flutter pub get
-flutter run -d chrome --web-port=3847
+cp .env.production.example .env.production   # fill URL + anon key
+./scripts/run_web.sh
 ```
 
-Static preview build (also used for publish):
+Sign up a real user → create surveys → publish → collect responses.
 
-```bash
-flutter build web --release
-rm -rf public && mkdir public && cp -R build/web/* public/
-python3 -m http.server 3847 --bind 127.0.0.1 --directory public
-```
-
-Demo organisation login:
-
-- Email: `ada@harbor.coffee`
-- Password: `fello123`
-
-Public form preview (after publish): `/f/harbor-visit`
-
-## Switch to Supabase
-
-1. Apply SQL in `supabase/migrations/` (then optional `supabase/seed.sql`).
-2. Run with defines:
-
-```bash
-flutter run -d chrome --web-port=3847 \
-  --dart-define=DATA_SOURCE=supabase \
-  --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY \
-  --dart-define=PUBLIC_BASE_URL=http://localhost:3847
-```
-
-Repositories share the same interfaces; only DI registration changes.
+Mock is opt-in only for tests: `--dart-define=DATA_SOURCE=mock`.
 
 ## Project layout
 
@@ -65,6 +44,57 @@ flutter test
 flutter analyze
 ```
 
+## Deploy to kaydo.sayge.in
+
+Production origin: **https://kaydo.sayge.in**  
+Public form links look like `https://kaydo.sayge.in/f/<slug>` (path URLs + SPA rewrite).
+
+### 1. Build
+
+```bash
+cp .env.production.example .env.production   # fill Supabase values
+set -a && source .env.production && set +a
+./scripts/build_web.sh
+```
+
+Output: `build/web/`
+
+### 2. DNS
+
+At your DNS for `sayge.in`, create:
+
+| Type  | Name  | Value                          |
+|-------|-------|--------------------------------|
+| CNAME | kaydo | your host target (or A record) |
+
+Examples: Vercel/Netlify/Cloudflare Pages assigned hostname, or your nginx box IP.
+
+### 3. Hosting (pick one)
+
+Upload / connect **`build/web`** and keep SPA fallback to `index.html`:
+
+- **Hostinger (recommended for sayge.in)** — step-by-step: `deploy/HOSTINGER.md` (uses `web/.htaccess`)
+- **Nginx** — sample vhost: `deploy/nginx.kaydo.sayge.in.conf`
+- **Vercel** — root `vercel.json` rewrites; deploy the `build/web` output
+- **Firebase Hosting** — `firebase.json` already points at `build/web`
+- **Netlify / Cloudflare Pages** — `web/_redirects` is copied into the build
+
+### 4. Supabase Auth
+
+In the Supabase project → Authentication → URL configuration:
+
+- **Site URL:** `https://kaydo.sayge.in`
+- **Redirect URLs:** `https://kaydo.sayge.in/**`
+
+Also allow the origin in any CORS / allowed hosts settings you use.
+
+### 5. Smoke check
+
+- `https://kaydo.sayge.in/sign-in`
+- Soft refresh on `/dashboard` (must not 404)
+- Published form: `https://kaydo.sayge.in/f/<slug>`
+- QR / share link uses `PUBLIC_BASE_URL=https://kaydo.sayge.in`
+
 ## Local path
 
-This repository is the Fello/Sayge project. Clone it to `/Users/adityarana/Code/Sayge` (or any path) on your machine.
+This repository is the Kaydo/Sayge project. Clone it to `/Users/adityarana/Code/Sayge` (or any path) on your machine.

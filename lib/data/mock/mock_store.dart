@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../domain/entities/feedback_form.dart';
+import '../../domain/entities/org_invite.dart';
 import '../../domain/entities/organization.dart';
 import '../../domain/entities/profile.dart';
 import '../../domain/entities/response.dart';
@@ -25,6 +26,11 @@ class MockStore {
   final Map<String, String> passwords = {};
   final List<FeedbackForm> forms = [];
   final List<FeedbackResponse> responses = [];
+  final List<OrgInvite> invites = [];
+
+  /// clientKey|formId → (windowStart, count)
+  final Map<String, (DateTime, int)> submitRateWindows = {};
+  final Set<String> submitDedupeIds = {};
 
   AuthSession? currentSession;
   final _authController = StreamController<AuthSession?>.broadcast();

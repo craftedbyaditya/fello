@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 
-enum ProfileRole { admin, member }
+enum ProfileRole { admin, employee }
 
 class Profile extends Equatable {
   const Profile({
@@ -9,6 +9,7 @@ class Profile extends Equatable {
     required this.displayName,
     required this.email,
     required this.role,
+    this.createdAt,
   });
 
   final String id;
@@ -16,6 +17,12 @@ class Profile extends Equatable {
   final String displayName;
   final String email;
   final ProfileRole role;
+  final DateTime? createdAt;
+
+  bool get isAdmin => role == ProfileRole.admin;
+  bool get isEmployee => role == ProfileRole.employee;
+
+  String get roleLabel => isAdmin ? 'Admin' : 'Employee';
 
   Profile copyWith({
     String? id,
@@ -23,6 +30,7 @@ class Profile extends Equatable {
     String? displayName,
     String? email,
     ProfileRole? role,
+    DateTime? createdAt,
   }) {
     return Profile(
       id: id ?? this.id,
@@ -30,9 +38,11 @@ class Profile extends Equatable {
       displayName: displayName ?? this.displayName,
       email: email ?? this.email,
       role: role ?? this.role,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 
   @override
-  List<Object?> get props => [id, orgId, displayName, email, role];
+  List<Object?> get props =>
+      [id, orgId, displayName, email, role, createdAt];
 }
