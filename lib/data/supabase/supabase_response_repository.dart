@@ -278,6 +278,20 @@ class SupabaseResponseRepository implements ResponseRepository {
     );
   }
 
+  @override
+  Future<FeedbackResponse> setResponsePublic({
+    required String responseId,
+    required bool isPublic,
+  }) async {
+    final row = await _client
+        .from('responses')
+        .update({'is_public': isPublic})
+        .eq('id', responseId)
+        .select('*, answers(*)')
+        .single();
+    return _mapResponse(Map<String, dynamic>.from(row));
+  }
+
   FeedbackResponse _mapResponse(Map<String, dynamic> row) {
     final answers = (row['answers'] as List? ?? [])
         .map((a) {
@@ -298,6 +312,7 @@ class SupabaseResponseRepository implements ResponseRepository {
         (row['metadata'] as Map?) ?? const {},
       ),
       answers: answers,
+      isPublic: row['is_public'] as bool? ?? false,
     );
   }
 }

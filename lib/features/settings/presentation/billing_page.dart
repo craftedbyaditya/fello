@@ -11,7 +11,9 @@ import '../../../shared/widgets/kaydo_toast.dart';
 import '../../auth/bloc/auth_bloc.dart';
 
 class BillingPage extends StatefulWidget {
-  const BillingPage({super.key});
+  const BillingPage({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   State<BillingPage> createState() => _BillingPageState();
@@ -37,8 +39,9 @@ class _BillingPageState extends State<BillingPage> {
       _error = null;
     });
     try {
-      final usage =
-          await getIt<BillingRepository>().getUsage(session.organization.id);
+      final usage = await getIt<BillingRepository>().getUsage(
+        session.organization.id,
+      );
       if (!mounted) return;
       setState(() {
         _usage = usage;
@@ -104,9 +107,8 @@ class _BillingPageState extends State<BillingPage> {
               Expanded(
                 child: Text(
                   'Choose a plan',
-                  style: Theme.of(dialogContext).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                  style: Theme.of(dialogContext).textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
               IconButton(
@@ -157,20 +159,14 @@ class _BillingPageState extends State<BillingPage> {
     final theme = Theme.of(context);
     final usage = _usage;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(28, 28, 28, 48),
-      children: [
-        Text('Subscription', style: theme.textTheme.headlineLarge),
-        const SizedBox(height: 24),
-        if (_loading)
-          const Padding(
+    final body = _loading
+        ? const Padding(
             padding: EdgeInsets.symmetric(vertical: 48),
             child: Center(child: CircularProgressIndicator()),
           )
-        else if (_error != null)
-          Text(_error!, style: const TextStyle(color: FelloColors.danger))
-        else
-          _OverviewBody(
+        : _error != null
+        ? Text(_error!, style: const TextStyle(color: FelloColors.danger))
+        : _OverviewBody(
             usage: usage!,
             onUpgrade: _openPlansDialog,
             onManagePayments: () {
@@ -180,7 +176,15 @@ class _BillingPageState extends State<BillingPage> {
                 tone: KaydoToastTone.info,
               );
             },
-          ),
+          );
+    if (widget.embedded) return body;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(28, 28, 28, 48),
+      children: [
+        Text('Subscription', style: theme.textTheme.headlineLarge),
+        const SizedBox(height: 24),
+        body,
       ],
     );
   }
@@ -225,21 +229,14 @@ class _OverviewBody extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 820;
-        final planCard = _CurrentPlanCard(
-          usage: usage,
-          onUpgrade: onUpgrade,
-        );
+        final planCard = _CurrentPlanCard(usage: usage, onUpgrade: onUpgrade);
         final paymentCard = _NextPaymentCard(
           usage: usage,
           onManagePayments: onManagePayments,
         );
         if (!wide) {
           return Column(
-            children: [
-              planCard,
-              const SizedBox(height: 16),
-              paymentCard,
-            ],
+            children: [planCard, const SizedBox(height: 16), paymentCard],
           );
         }
         return Row(
@@ -256,10 +253,7 @@ class _OverviewBody extends StatelessWidget {
 }
 
 class _CurrentPlanCard extends StatelessWidget {
-  const _CurrentPlanCard({
-    required this.usage,
-    required this.onUpgrade,
-  });
+  const _CurrentPlanCard({required this.usage, required this.onUpgrade});
 
   final PlanUsage usage;
   final VoidCallback onUpgrade;
@@ -270,7 +264,8 @@ class _CurrentPlanCard extends StatelessWidget {
     final plan = usage.plan;
     final maxResponses = plan.maxResponsesPerMonth;
     final used = usage.responsesThisMonth;
-    final progress = usage.responseProgress ??
+    final progress =
+        usage.responseProgress ??
         (maxResponses == null ? 0.15 : (used / maxResponses).clamp(0.0, 1.0));
     final usageLabel = maxResponses == null
         ? '$used responses this month'
@@ -289,8 +284,10 @@ class _CurrentPlanCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: FelloColors.ink,
                   borderRadius: BorderRadius.circular(8),
@@ -392,10 +389,7 @@ class _CurrentPlanCard extends StatelessWidget {
 }
 
 class _NextPaymentCard extends StatelessWidget {
-  const _NextPaymentCard({
-    required this.usage,
-    required this.onManagePayments,
-  });
+  const _NextPaymentCard({required this.usage, required this.onManagePayments});
 
   final PlanUsage usage;
   final VoidCallback onManagePayments;
@@ -403,8 +397,9 @@ class _NextPaymentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final nextDate =
-        usage.periodEnd.toLocal().subtract(const Duration(days: 1));
+    final nextDate = usage.periodEnd.toLocal().subtract(
+      const Duration(days: 1),
+    );
     final dateLabel = DateFormat('MMMM d, yyyy').format(nextDate);
     final isFree = usage.plan.priceInrMonthly == 0;
 
@@ -419,9 +414,7 @@ class _NextPaymentCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            isFree
-                ? 'No payment due on Free'
-                : 'Next payment on $dateLabel',
+            isFree ? 'No payment due on Free' : 'Next payment on $dateLabel',
             style: theme.textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.w600,
               fontSize: 18,

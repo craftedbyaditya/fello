@@ -1,0 +1,81 @@
+name: Flutter CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kaydo-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          cache: true
+      - run: flutter pub get
+      - run: flutter test
+      - run: flutter analyze
+
+  build-and-deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-22.04
+    environment: production
+    concurrency:
+      group: kaydo-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          cache: true
+      - run: flutter pub get
+      - name: Validate production browser configuration
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+          HOSTINGER_DOCUMENT_ROOT: ${{ vars.HOSTINGER_DOCUMENT_ROOT }}
+          HOSTINGER_SSH_PORT: ${{ vars.HOSTINGER_SSH_PORT }}
+          HOSTINGER_SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          HOSTINGER_SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          HOSTINGER_SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          HOSTINGER_SSH_KNOWN_HOSTS: ${{ secrets.HOSTINGER_SSH_KNOWN_HOSTS }}
+        run: ./scripts/validate_production_deploy.sh
+      - name: Build release web artifact
+        env:
+          DATA_SOURCE: supabase
+          PUBLIC_BASE_URL: https://kaydo.sayge.in
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: ./scripts/build_release_web.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kaydo-web-${{ github.sha }}
+          path: build/web
+          if-no-files-found: error
+          retention-days: 30
+      - name: Deploy immutable release over SSH
+        env:
+          HOSTINGER_SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          HOSTINGER_SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          HOSTINGER_SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          HOSTINGER_SSH_KNOWN_HOSTS: ${{ secrets.HOSTINGER_SSH_KNOWN_HOSTS }}
+          HOSTINGER_DOCUMENT_ROOT: ${{ vars.HOSTINGER_DOCUMENT_ROOT }}
+          HOSTINGER_SSH_PORT: ${{ vars.HOSTINGER_SSH_PORT }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: ./scripts/deploy_hostinger_ssh.sh

@@ -20,4 +20,10 @@ abstract class ResponseRepository {
     String? submissionId,
     String? turnstileToken,
   });
+
+  /// Admin-only: mark a response public (API-eligible) or private.
+  Future<FeedbackResponse> setResponsePublic({
+    required String responseId,
+    required bool isPublic,
+  });
 }

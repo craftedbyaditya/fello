@@ -13,17 +13,17 @@ import '../../../shared/widgets/kaydo_toast.dart';
 import '../../auth/bloc/auth_bloc.dart';
 
 class WorkspaceLogoPage extends StatefulWidget {
-  const WorkspaceLogoPage({super.key});
+  const WorkspaceLogoPage({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   State<WorkspaceLogoPage> createState() => _WorkspaceLogoPageState();
 }
 
 class _WorkspaceLogoPageState extends State<WorkspaceLogoPage> {
-  bool _showOnForms = false;
   bool _saving = false;
   bool _hydrated = false;
-  bool _removeExisting = false;
   Uint8List? _pickedBytes;
   String? _pickedContentType;
   String? _pickedExtension;
@@ -33,11 +33,11 @@ class _WorkspaceLogoPageState extends State<WorkspaceLogoPage> {
     final org = context.read<AuthBloc>().state.session?.organization;
     if (org == null || _hydrated) return;
     _existingUrl = org.logoUrl;
-    _showOnForms = org.showLogoOnForms;
     _hydrated = true;
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickAndSave() async {
+    if (_saving) return;
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['png', 'jpg', 'jpeg', 'webp', 'svg'],
@@ -64,33 +64,21 @@ class _WorkspaceLogoPageState extends State<WorkspaceLogoPage> {
       );
       return;
     }
+
     setState(() {
       _pickedBytes = bytes;
       _pickedExtension = file.extension;
       _pickedContentType = _mimeForExtension(file.extension);
-      _removeExisting = false;
+      _saving = true;
     });
-  }
 
-  String? _mimeForExtension(String? ext) {
-    return switch (ext?.toLowerCase()) {
-      'jpg' || 'jpeg' => 'image/jpeg',
-      'webp' => 'image/webp',
-      'svg' => 'image/svg+xml',
-      'png' => 'image/png',
-      _ => null,
-    };
-  }
-
-  Future<void> _save() async {
-    setState(() => _saving = true);
     try {
       final updated = await getIt<AuthRepository>().updateWorkspaceLogo(
-        imageBytes: _pickedBytes,
+        imageBytes: bytes,
         contentType: _pickedContentType,
         fileExtension: _pickedExtension,
-        showOnForms: _showOnForms,
-        removeLogo: _removeExisting && _pickedBytes == null,
+        showOnForms: true,
+        removeLogo: false,
       );
       if (!mounted) return;
       context.read<AuthBloc>().add(AuthOrganizationUpdated(updated));
@@ -99,21 +87,15 @@ class _WorkspaceLogoPageState extends State<WorkspaceLogoPage> {
         _pickedBytes = null;
         _pickedContentType = null;
         _pickedExtension = null;
-        _removeExisting = false;
-        _showOnForms = updated.showLogoOnForms;
       });
       showKaydoToast(
         context,
-        message: 'Logo settings saved',
+        message: 'Logo uploaded',
         tone: KaydoToastTone.success,
       );
     } on AuthFailure catch (e) {
       if (!mounted) return;
-      showKaydoToast(
-        context,
-        message: e.message,
-        tone: KaydoToastTone.error,
-      );
+      showKaydoToast(context, message: e.message, tone: KaydoToastTone.error);
     } catch (_) {
       if (!mounted) return;
       showKaydoToast(
@@ -124,6 +106,47 @@ class _WorkspaceLogoPageState extends State<WorkspaceLogoPage> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _removeLogo() async {
+    if (_saving || _existingUrl == null) return;
+    setState(() => _saving = true);
+    try {
+      final updated = await getIt<AuthRepository>().updateWorkspaceLogo(
+        showOnForms: false,
+        removeLogo: true,
+      );
+      if (!mounted) return;
+      context.read<AuthBloc>().add(AuthOrganizationUpdated(updated));
+      setState(() => _existingUrl = null);
+      showKaydoToast(
+        context,
+        message: 'Logo removed',
+        tone: KaydoToastTone.success,
+      );
+    } on AuthFailure catch (e) {
+      if (!mounted) return;
+      showKaydoToast(context, message: e.message, tone: KaydoToastTone.error);
+    } catch (_) {
+      if (!mounted) return;
+      showKaydoToast(
+        context,
+        message: "We couldn't remove your logo. Please try again.",
+        tone: KaydoToastTone.error,
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  String? _mimeForExtension(String? ext) {
+    return switch (ext?.toLowerCase()) {
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'webp' => 'image/webp',
+      'svg' => 'image/svg+xml',
+      'png' => 'image/png',
+      _ => null,
+    };
   }
 
   @override
@@ -142,8 +165,7 @@ class _WorkspaceLogoPageState extends State<WorkspaceLogoPage> {
       return _messageGate(
         context,
         title: 'Workspace logo is available on paid plans',
-        body:
-            'Upgrade to Starter or higher to upload your logo and show it on public feedback forms.',
+        body: 'Upgrade to Starter or higher to upload your logo and show it on public feedback forms.',
         actionLabel: 'View plans',
         onAction: () => context.go('/settings/billing'),
       );
@@ -152,130 +174,195 @@ class _WorkspaceLogoPageState extends State<WorkspaceLogoPage> {
     _hydrateFromSession();
 
     final theme = Theme.of(context);
-    final hasPreview = _pickedBytes != null ||
-        (!_removeExisting &&
-            _existingUrl != null &&
-            _existingUrl!.trim().isNotEmpty);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(28, 28, 28, 48),
-      children: [
-        Text('Logo', style: theme.textTheme.headlineLarge),
-        const SizedBox(height: 8),
-        Text(
-          'Upload your brand mark for public feedback forms.',
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: FelloColors.inkSoft,
-          ),
-        ),
-        const SizedBox(height: 24),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(28),
-          decoration: BoxDecoration(
-            color: FelloColors.paper,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: FelloColors.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
+    final editor = Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: AspectRatio(
+          aspectRatio: 1.4,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _saving ? null : _pickAndSave,
+              borderRadius: BorderRadius.circular(16),
+              child: CustomPaint(
+                painter: _DashedBorderPainter(
+                  color: FelloColors.border,
+                  radius: 16,
+                ),
                 child: Container(
-                  width: 112,
-                  height: 112,
-                  decoration: BoxDecoration(
-                    color: FelloColors.accentSoft,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: FelloColors.border),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: _buildPreview(),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: _saving ? null : _pickImage,
-                    icon: const Icon(Icons.upload_file_outlined, size: 18),
-                    label: Text(
-                      hasPreview ? 'Replace image' : 'Upload image',
-                    ),
-                  ),
-                  if (hasPreview)
-                    TextButton(
-                      onPressed: _saving
-                          ? null
-                          : () => setState(() {
-                                _pickedBytes = null;
-                                _pickedContentType = null;
-                                _pickedExtension = null;
-                                _removeExisting = true;
-                                _showOnForms = false;
-                              }),
-                      style: TextButton.styleFrom(
-                        foregroundColor: FelloColors.danger,
-                      ),
-                      child: const Text('Remove'),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'PNG, JPG, WebP, or SVG · max 2 MB',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: FelloColors.inkSoft,
-                ),
-              ),
-              const SizedBox(height: 20),
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  'Show logo on public forms',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                subtitle: Text(
-                  'When enabled, your logo appears at the top of /f/… pages.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: FelloColors.inkSoft,
-                  ),
-                ),
-                value: _showOnForms,
-                activeThumbColor: FelloColors.accent,
-                onChanged: _saving || !hasPreview
-                    ? null
-                    : (v) => setState(() => _showOnForms = v),
-              ),
-              const SizedBox(height: 20),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton(
-                  onPressed: _saving ? null : _save,
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.all(24),
                   child: _saving
                       ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
+                          width: 28,
+                          height: 28,
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Save'),
+                      : _buildContent(theme),
                 ),
               ),
-            ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (widget.embedded) return _buildEmbeddedEditor(theme);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 28, 28, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Logo', style: theme.textTheme.headlineLarge),
+          const SizedBox(height: 24),
+          Expanded(child: editor),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent(ThemeData theme) {
+    final preview = _buildPreview();
+    if (preview != null) {
+      return Column(
+        children: [
+          Expanded(child: preview),
+          const SizedBox(height: 12),
+          Text(
+            'Tap to replace',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: FelloColors.inkSoft,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(
+          Icons.add_photo_alternate_outlined,
+          size: 40,
+          color: FelloColors.inkSoft,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Upload image',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'PNG, JPG, WebP, or SVG · max 2 MB',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: FelloColors.inkSoft,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildPreview() {
+  Widget _buildEmbeddedEditor(ThemeData theme) {
+    final hasLogo = _existingUrl != null && _existingUrl!.trim().isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _saving ? null : _pickAndSave,
+            borderRadius: BorderRadius.circular(12),
+            child: CustomPaint(
+              painter: _DashedBorderPainter(
+                color: FelloColors.border,
+                radius: 12,
+              ),
+              child: SizedBox(
+                height: 76,
+                child: Center(
+                  child: _saving
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.upload_file_outlined,
+                              size: 22,
+                              color: FelloColors.inkSoft,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'Click to upload logo',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              'PNG, JPG, WebP, or SVG · max 2 MB',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: FelloColors.inkSoft,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (hasLogo) ...[
+          const SizedBox(height: 8),
+          Container(
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: FelloColors.border),
+            ),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 30,
+                    height: 30,
+                    child: _buildPreview(),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Workspace logo',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Remove logo',
+                  onPressed: _saving ? null : _removeLogo,
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 18,
+                    color: FelloColors.inkSoft,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget? _buildPreview() {
     if (_pickedBytes != null) {
       return Image.memory(
         _pickedBytes!,
@@ -287,9 +374,7 @@ class _WorkspaceLogoPageState extends State<WorkspaceLogoPage> {
         ),
       );
     }
-    if (!_removeExisting &&
-        _existingUrl != null &&
-        _existingUrl!.trim().isNotEmpty) {
+    if (_existingUrl != null && _existingUrl!.trim().isNotEmpty) {
       final url = _existingUrl!;
       if (url.startsWith('data:')) {
         final data = Uri.parse(url).data;
@@ -315,11 +400,7 @@ class _WorkspaceLogoPageState extends State<WorkspaceLogoPage> {
         ),
       );
     }
-    return const Icon(
-      Icons.image_outlined,
-      size: 36,
-      color: FelloColors.accentDeep,
-    );
+    return null;
   }
 
   Widget _messageGate(
@@ -354,14 +435,52 @@ class _WorkspaceLogoPageState extends State<WorkspaceLogoPage> {
                 ),
               ],
               const SizedBox(height: 20),
-              FilledButton(
-                onPressed: onAction,
-                child: Text(actionLabel),
-              ),
+              FilledButton(onPressed: onAction, child: Text(actionLabel)),
             ],
           ),
         ),
       ),
     );
+  }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  _DashedBorderPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+  static const double _strokeWidth = 1.5;
+  static const double _dashLength = 7;
+  static const double _gapLength = 5;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _strokeWidth;
+
+    final rrect = RRect.fromRectAndRadius(
+      Offset(_strokeWidth / 2, _strokeWidth / 2) &
+          Size(size.width - _strokeWidth, size.height - _strokeWidth),
+      Radius.circular(radius),
+    );
+    final path = Path()..addRRect(rrect);
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = distance + _dashLength;
+        canvas.drawPath(
+          metric.extractPath(distance, next.clamp(0, metric.length)),
+          paint,
+        );
+        distance = next + _gapLength;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.radius != radius;
   }
 }

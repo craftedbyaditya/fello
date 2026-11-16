@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -5,9 +7,11 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'core/config/app_config.dart';
 import 'core/di/service_locator.dart';
+import 'core/feature_flags/feature_flags_controller.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/fello_theme.dart';
 import 'domain/repositories/auth_repository.dart';
+import 'domain/repositories/feature_flags_repository.dart';
 import 'features/auth/bloc/auth_bloc.dart';
 import 'shared/widgets/web_desktop_only_gate.dart';
 
@@ -30,8 +34,10 @@ Future<void> main() async {
 
   final authBloc = AuthBloc(getIt<AuthRepository>())
     ..add(const AuthSubscriptionRequested());
+  final featureFlags = FeatureFlagsController(getIt<FeatureFlagsRepository>());
+  await featureFlags.refresh();
 
-  runApp(FelloApp(authBloc: authBloc));
+  runApp(FelloApp(authBloc: authBloc, featureFlags: featureFlags));
 }
 
 class _BootErrorApp extends StatelessWidget {
@@ -61,17 +67,51 @@ class _BootErrorApp extends StatelessWidget {
   }
 }
 
-class FelloApp extends StatelessWidget {
-  const FelloApp({super.key, required this.authBloc});
+class FelloApp extends StatefulWidget {
+  const FelloApp({
+    super.key,
+    required this.authBloc,
+    required this.featureFlags,
+  });
 
   final AuthBloc authBloc;
+  final FeatureFlagsController featureFlags;
+
+  @override
+  State<FelloApp> createState() => _FelloAppState();
+}
+
+class _FelloAppState extends State<FelloApp> with WidgetsBindingObserver {
+  late final StreamSubscription _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _authSubscription = widget.authBloc.stream.listen((_) {
+      widget.featureFlags.refresh(force: true);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) widget.featureFlags.refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _authSubscription.cancel();
+    widget.featureFlags.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final router = createRouter(authBloc);
+    final router = createRouter(widget.authBloc, widget.featureFlags);
 
     return BlocProvider.value(
-      value: authBloc,
+      value: widget.authBloc,
       child: MaterialApp.router(
         title: 'Kaydo',
         debugShowCheckedModeBanner: false,

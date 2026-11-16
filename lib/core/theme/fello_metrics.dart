@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 /// Shared control geometry so buttons, search fields, and inputs align.
 abstract final class FelloMetrics {
   /// Single-line control height (buttons, search, text fields).
-  static const double controlHeight = 48;
+  static const double controlHeight = 40;
 
   static const double controlRadius = 10;
 
@@ -19,14 +19,20 @@ abstract final class FelloMetrics {
   static const Size controlMinSize = Size(0, controlHeight);
   static const Size controlMaxSize = Size(double.infinity, controlHeight);
 
-  static const EdgeInsets controlPaddingH = EdgeInsets.symmetric(horizontal: 16);
+  static const EdgeInsets controlPaddingH = EdgeInsets.symmetric(
+    horizontal: 16,
+  );
 
-  /// Padding inside single-line inputs — keeps ~48px total with border.
-  static const EdgeInsets fieldContentPadding =
-      EdgeInsets.symmetric(horizontal: 14, vertical: 14);
+  /// Padding inside single-line inputs — keeps ~40px total with border.
+  static const EdgeInsets fieldContentPadding = EdgeInsets.symmetric(
+    horizontal: 14,
+    vertical: 10,
+  );
 
-  static const EdgeInsets fieldContentPaddingMultiline =
-      EdgeInsets.symmetric(horizontal: 14, vertical: 12);
+  static const EdgeInsets fieldContentPaddingMultiline = EdgeInsets.symmetric(
+    horizontal: 14,
+    vertical: 12,
+  );
 
   /// Prefix/suffix icons must not inflate field height past [controlHeight].
   static const BoxConstraints iconBoxConstraints = BoxConstraints(
@@ -47,7 +53,6 @@ abstract final class FelloMetrics {
   static BorderRadius get dialogBorderRadius =>
       BorderRadius.circular(dialogRadius);
 
-  static ShapeBorder get dialogShape => RoundedRectangleBorder(
-        borderRadius: dialogBorderRadius,
-      );
+  static ShapeBorder get dialogShape =>
+      RoundedRectangleBorder(borderRadius: dialogBorderRadius);
 }

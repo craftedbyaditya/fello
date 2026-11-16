@@ -1,0 +1,19 @@
+\set ON_ERROR_STOP on
+
+-- P0.9 Free Forever beta release package.
+-- Run with psql from this repository checkout. `\ir` resolves paths relative
+-- to this file, so this package executes exactly the migrations tested against
+-- the restored hosted schema and nothing else.
+--
+-- Do not use `supabase db push` for this release: hosted migration history is
+-- divergent from the repository's historical migration ledger.
+
+begin;
+
+\ir ../../supabase/migrations/20261115193000_p0_security_subscription_foundation.sql
+\ir ../../supabase/migrations/20261115194000_fix_security_definer_extension_path.sql
+\ir ../../supabase/migrations/20261116100000_global_feature_flags_free_launch.sql
+\ir ../../supabase/migrations/20261116101000_gate_task_board_mutations.sql
+\ir ../../supabase/migrations/20261116110000_reconcile_legacy_submit_rpc_grant.sql
+
+commit;

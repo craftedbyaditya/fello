@@ -26,8 +26,10 @@ Kaydo defaults to **Supabase** at runtime. Mock is only for unit tests /
    - `supabase/migrations/20260324170000_org_logo.sql`
    - `supabase/migrations/20260324171000_org_logo_storage.sql`
    - `supabase/migrations/20260324180000_lock_plans_and_submit_path.sql`
+   - `supabase/migrations/20260324190000_ai_feedback_workflow.sql`
+   - `supabase/migrations/20260324191000_form_deleted_status.sql`
 3. If earlier migrations already succeeded, skip those and run only the new ones.
-4. Confirm tables exist under **Table Editor**: `organizations`, `profiles`, `organization_invites`, `forms`, `questions`, `responses`, `answers`, `submission_rate_limits`, `submission_dedupe`
+4. Confirm tables exist under **Table Editor**: `organizations`, `profiles`, `organization_invites`, `forms`, `questions`, `responses`, `answers`, `submission_rate_limits`, `submission_dedupe`, `feedback_processing_jobs`, `feedback_analysis`, `complaint_tasks`, `notification_events`
 
 ### Option B — Supabase CLI
 
@@ -106,8 +108,50 @@ supabase secrets set TURNSTILE_SECRET_KEY=your_turnstile_secret
 
 4. Confirm `TURNSTILE_SECRET_KEY` is set — without it the function returns 503.
 
+## 7b. AI Feedback-to-Action (optional but recommended)
+
+After `20260324190000_ai_feedback_workflow.sql` is applied:
+
+```bash
+supabase functions deploy process-feedback-ai
+supabase secrets set AI_ENABLED=true
+supabase secrets set AI_API_KEY=sk-...
+supabase secrets set AI_MODEL=gpt-4o-mini
+supabase secrets set AI_WORKER_SECRET="$(openssl rand -hex 32)"
+# optional OpenAI-compatible base:
+# supabase secrets set AI_BASE_URL=https://api.openai.com/v1
+```
+
+- Customer submit still succeeds if AI is down (`submit-feedback` fire-and-forget).
+- Jobs enqueue via DB trigger on `responses` insert.
+- Org kill switch: `organizations.ai_feedback_enabled`.
+- Monthly cap: `organizations.ai_monthly_analysis_limit` (default 100).
+- Global kill switch: Edge secret `AI_ENABLED=false`.
+
+Schedule a cron (Dashboard → Edge Functions → Schedules) to call
+`process-feedback-ai` every 1–5 minutes as a backup worker. It must send the
+same `AI_WORKER_SECRET` in the `x-ai-worker-secret` header. Do **not** put the
+Supabase service-role key in a scheduler or Flutter client. The worker rejects
+missing or incorrect secrets before claiming queue jobs.
+
 **Subscription note:** `plan_id` cannot be changed by authenticated clients.
 Paid entitlements stay locked until a payment webhook (service_role) is wired.
+
+## 7c. Reviews API (Developer Docs)
+
+After `20260324192000_reviews_api.sql` is applied:
+
+```bash
+supabase functions deploy reviews-api --no-verify-jwt
+```
+
+`--no-verify-jwt` is required so callers authenticate with `X-API-Key` instead of a user JWT.
+
+- Only Pro orgs can create keys or call the API (server-enforced). The response
+  contains only explicitly published review text and rating; raw answers never
+  leave Kaydo through this API.
+- Admins mark reviews **Public** in Reviews; only those appear in `GET /functions/v1/reviews-api`.
+- Rate limit: 60 requests / minute / key.
 
 ## 8. First real user (journey check)
 
@@ -122,7 +166,8 @@ Paid entitlements stay locked until a payment webhook (service_role) is wired.
 
 ## Checklist
 
-- [ ] Migrations applied through `20260324180000_...` (no seed)
+- [ ] Migrations applied through `20261115193000_...` (no seed)
+- [ ] `process-feedback-ai` deployed with `AI_API_KEY` and `AI_WORKER_SECRET` (if using AI)
 - [ ] Site URL + redirects set (include reset-password)
 - [ ] `.env.production` filled (never commit) including `TURNSTILE_SITE_KEY`
 - [ ] App built with `DATA_SOURCE=supabase` + Turnstile site key
@@ -131,3 +176,4 @@ Paid entitlements stay locked until a payment webhook (service_role) is wired.
 - [ ] Sign-up → onboarding → publish → public submit (with captcha) smoke-tested
 - [ ] Password reset + mobile invite smoke-tested
 - [ ] Confirm plan change from the app is rejected (Coming soon)
+- [ ] Confirm a Free and Growth API key both receive 403; Pro receives only explicit public review fields

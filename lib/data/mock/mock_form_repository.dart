@@ -121,9 +121,23 @@ class MockFormRepository implements FormRepository {
     return published;
   }
 
+  @override
+  Future<FeedbackForm> unpublishForm(String formId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 160));
+    final index = _store.forms.indexWhere((f) => f.id == formId);
+    if (index < 0) throw StateError('Form not found');
+    final form = _store.forms[index];
+    _assertSameOrg(form.orgId);
+    final updated = form.copyWith(status: FormStatus.draft);
+    _store.forms[index] = updated;
+    return updated;
+  }
+
   void _assertCanCreateSurvey(String orgId) {
     final org = _store.organizations.firstWhere((o) => o.id == orgId);
-    final count = _store.forms.where((f) => f.orgId == orgId).length;
+    final count = _store.forms
+        .where((f) => f.orgId == orgId && !f.isDeleted)
+        .length;
     if (!org.plan.allowsAnotherSurvey(count)) {
       throw PlanLimitFailure(
         'Your ${org.plan.name} plan allows ${org.plan.maxSurveys} surveys. '
@@ -133,14 +147,14 @@ class MockFormRepository implements FormRepository {
   }
 
   @override
-  Future<void> deleteForm(String formId) async {
+  Future<FeedbackForm> deleteForm(String formId) async {
     _assertAdmin();
     final index = _store.forms.indexWhere((f) => f.id == formId);
-    if (index >= 0) {
-      _assertSameOrg(_store.forms[index].orgId);
-    }
-    _store.forms.removeWhere((f) => f.id == formId);
-    _store.responses.removeWhere((r) => r.formId == formId);
+    if (index < 0) throw StateError('Form not found');
+    _assertSameOrg(_store.forms[index].orgId);
+    final updated = _store.forms[index].copyWith(status: FormStatus.deleted);
+    _store.forms[index] = updated;
+    return updated;
   }
 
   void _assertAdmin() {

@@ -9,6 +9,7 @@ import '../../domain/public_answer_validator.dart';
 import '../../domain/repositories/response_repository.dart';
 import '../../domain/submit_guard_failure.dart';
 import 'mock_store.dart';
+import 'mock_workflow_repository.dart';
 
 class MockResponseRepository implements ResponseRepository {
   MockResponseRepository(this._store);
@@ -132,7 +133,36 @@ class MockResponseRepository implements ResponseRepository {
     );
     _store.responses.add(response);
     _store.submitDedupeIds.add(sid);
+    // Background AI in mock: never fail the submit path.
+    try {
+      await MockWorkflowRepository(_store).processResponseLocally(responseId);
+    } catch (_) {}
     return response;
+  }
+
+  @override
+  Future<FeedbackResponse> setResponsePublic({
+    required String responseId,
+    required bool isPublic,
+  }) async {
+    final session = _store.currentSession;
+    if (session == null || !session.profile.isAdmin) {
+      throw const AuthPermissionFailure(
+        'Only admins can change review visibility.',
+      );
+    }
+    final index = _store.responses.indexWhere((r) => r.id == responseId);
+    if (index < 0) throw StateError('Response not found');
+    final response = _store.responses[index];
+    final form = _store.forms.firstWhere((f) => f.id == response.formId);
+    if (form.orgId != session.organization.id) {
+      throw const AuthPermissionFailure(
+        'You cannot access another organisation’s data.',
+      );
+    }
+    final updated = response.copyWith(isPublic: isPublic);
+    _store.responses[index] = updated;
+    return updated;
   }
 
   List<FeedbackResponse> _filtered(String orgId, ResponseFilters filters) {

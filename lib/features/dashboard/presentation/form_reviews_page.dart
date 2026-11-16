@@ -9,6 +9,7 @@ import '../../../domain/entities/feedback_form.dart';
 import '../../../shared/animations/fade_slide_in.dart';
 import '../../../shared/widgets/fello_back_button.dart';
 import '../../auth/bloc/auth_bloc.dart';
+import '../../complaints/presentation/survey_follow_ups_section.dart';
 import '../bloc/dashboard_bloc.dart';
 import '../export/review_exporter.dart';
 import 'widgets/export_reviews_sheet.dart';
@@ -19,9 +20,10 @@ const _barTrack = Color(0xFFE8ECF1);
 const _barFill = Color(0xFF4F6EF7);
 
 class FormReviewsPage extends StatefulWidget {
-  const FormReviewsPage({super.key, required this.formId});
+  const FormReviewsPage({super.key, required this.formId, this.taskId});
 
   final String formId;
+  final String? taskId;
 
   @override
   State<FormReviewsPage> createState() => _FormReviewsPageState();
@@ -109,7 +111,7 @@ class _FormReviewsPageState extends State<FormReviewsPage> {
                       child: _SummaryRow(summary: summary),
                     ),
                     SoftPadding(
-                      padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
+                      padding: const EdgeInsets.fromLTRB(28, 20, 28, 16),
                       child: wide
                           ? Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -143,6 +145,13 @@ class _FormReviewsPageState extends State<FormReviewsPage> {
                                 ),
                               ],
                             ),
+                    ),
+                    SoftPadding(
+                      padding: const EdgeInsets.fromLTRB(28, 0, 28, 36),
+                      child: SurveyFollowUpsSection(
+                        formId: formId,
+                        highlightTaskId: widget.taskId,
+                      ),
                     ),
                   ],
                 );
@@ -684,7 +693,18 @@ class _ReviewsColumn extends StatelessWidget {
         else
           for (var i = 0; i < reviews.length; i++) ...[
             if (i > 0) const SizedBox(height: 12),
-            ReviewCard(review: reviews[i]),
+            ReviewCard(
+              review: reviews[i],
+              onVisibilityChanged: () {
+                final orgId = context.read<DashboardBloc>().state.orgId ??
+                    context.read<AuthBloc>().state.session?.organization.id;
+                if (orgId != null) {
+                  context
+                      .read<DashboardBloc>()
+                      .add(DashboardLoadRequested(orgId));
+                }
+              },
+            ),
           ],
       ],
     );

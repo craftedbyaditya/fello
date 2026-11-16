@@ -8,6 +8,7 @@ import '../../../core/theme/fello_typography.dart';
 import '../../../domain/entities/feedback_form.dart';
 import '../../../shared/animations/fade_slide_in.dart';
 import '../../../shared/widgets/kaydo_search_field.dart';
+import '../../../shared/widgets/kaydo_toast.dart';
 import '../../../shared/widgets/pressable_scale.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../bloc/forms_bloc.dart';
@@ -55,8 +56,65 @@ class _FormsListPageState extends State<FormsListPage> {
       return form.title.toLowerCase().contains(q) ||
           form.description.toLowerCase().contains(q) ||
           form.slug.toLowerCase().contains(q) ||
+          form.statusLabel.toLowerCase().contains(q) ||
           status.contains(q);
     }).toList();
+  }
+
+  Future<void> _confirmDelete(FeedbackForm form) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete survey?'),
+        content: Text(
+          '“${form.title}” will be marked Deleted and turned off. '
+          'It stays in this list so you can still see it.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: FelloColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    context.read<FormsBloc>().add(FormDeleteRequested(form.id));
+  }
+
+  void _toggleSurvey(FeedbackForm form) {
+    final bloc = context.read<FormsBloc>();
+    if (form.isPublished) {
+      bloc.add(FormUnpublishRequested(form.id));
+      showKaydoToast(
+        context,
+        message: 'Survey turned off',
+        tone: KaydoToastTone.info,
+      );
+    } else if (form.isDeleted || form.status == FormStatus.draft) {
+      if (form.questions.isEmpty) {
+        showKaydoToast(
+          context,
+          message: 'Add at least one question before turning on.',
+          tone: KaydoToastTone.error,
+        );
+        return;
+      }
+      bloc.add(FormPublishRequested(form));
+      showKaydoToast(
+        context,
+        message: 'Survey turned on',
+        tone: KaydoToastTone.success,
+      );
+    }
   }
 
   @override
@@ -85,32 +143,45 @@ class _FormsListPageState extends State<FormsListPage> {
                   child: FadeSlideIn(
                     child: FelloPageHeader(
                       title: 'Survey',
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            height: FelloMetrics.controlHeight,
-                            child: FilledButton.icon(
+                      trailing: SizedBox(
+                        height: FelloMetrics.controlHeight,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (state.forms.isNotEmpty) ...[
+                              KaydoSearchField(
+                                controller: _search,
+                                hintText: 'Search surveys',
+                                onChanged: (value) =>
+                                    setState(() => _query = value),
+                                onClear: () {
+                                  _search.clear();
+                                  setState(() => _query = '');
+                                },
+                              ),
+                              const SizedBox(width: 12),
+                            ],
+                            FilledButton(
                               onPressed: () => context.go('/forms/new'),
-                              icon: const Icon(Icons.add, size: 18),
-                              label: const Text('New survey'),
-                            ),
-                          ),
-                          if (state.forms.isNotEmpty) ...[
-                            const SizedBox(width: 12),
-                            KaydoSearchField(
-                              controller: _search,
-                              hintText: 'Search surveys',
-                              onChanged: (value) =>
-                                  setState(() => _query = value),
-                              onClear: () {
-                                _search.clear();
-                                setState(() => _query = '');
-                              },
+                              style: FilledButton.styleFrom(
+                                minimumSize: Size.zero,
+                                maximumSize: FelloMetrics.controlMaxSize,
+                                padding: FelloMetrics.controlPaddingH,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.standard,
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.add, size: 18),
+                                  SizedBox(width: 8),
+                                  Text('New survey'),
+                                ],
+                              ),
                             ),
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -190,11 +261,32 @@ class _FormsListPageState extends State<FormsListPage> {
                         const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final form = filtered[index];
+                      final isAdmin = context
+                              .watch<AuthBloc>()
+                              .state
+                              .session
+                              ?.profile
+                              .isAdmin ??
+                          false;
                       return FadeSlideIn(
                         delay: Duration(milliseconds: 40 * index),
                         child: PressableScale(
-                          onTap: () => context.go('/forms/${form.id}'),
-                          child: _FormTile(form: form),
+                          onTap: form.isDeleted
+                              ? () => showKaydoToast(
+                                    context,
+                                    message:
+                                        'This survey is deleted. Turn it on to edit again.',
+                                    tone: KaydoToastTone.info,
+                                  )
+                              : () => context.go('/forms/${form.id}'),
+                          child: _FormTile(
+                            form: form,
+                            canDelete: isAdmin && !form.isDeleted,
+                            onToggle: () => _toggleSurvey(form),
+                            onDelete: isAdmin && !form.isDeleted
+                                ? () => _confirmDelete(form)
+                                : null,
+                          ),
                         ),
                       );
                     },
@@ -229,14 +321,39 @@ class SoftFillRemaining extends StatelessWidget {
 }
 
 class _FormTile extends StatelessWidget {
-  const _FormTile({required this.form});
+  const _FormTile({
+    required this.form,
+    required this.canDelete,
+    required this.onToggle,
+    this.onDelete,
+  });
 
   final FeedbackForm form;
+  final bool canDelete;
+  final VoidCallback onToggle;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final published = form.isPublished;
     final compact = FelloTypography.isCompact(context);
+    final (chipBg, chipFg, chipBorder) = switch (form.status) {
+      FormStatus.published => (
+          FelloColors.accentSoft,
+          FelloColors.accentDeep,
+          false,
+        ),
+      FormStatus.deleted => (
+          const Color(0xFFFEE2E2),
+          FelloColors.danger,
+          false,
+        ),
+      FormStatus.draft => (
+          FelloColors.paper,
+          FelloColors.inkSoft,
+          true,
+        ),
+    };
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(
@@ -244,7 +361,7 @@ class _FormTile extends StatelessWidget {
         vertical: compact ? 12 : 14,
       ),
       decoration: BoxDecoration(
-        color: FelloColors.paper,
+        color: form.isDeleted ? const Color(0xFFFAFAFA) : FelloColors.paper,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: FelloColors.border),
       ),
@@ -256,7 +373,11 @@ class _FormTile extends StatelessWidget {
               children: [
                 Text(
                   form.title,
-                  style: FelloTypography.listTitle(context),
+                  style: FelloTypography.listTitle(context).copyWith(
+                    color: form.isDeleted
+                        ? FelloColors.inkSoft
+                        : FelloColors.ink,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -274,24 +395,44 @@ class _FormTile extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: published ? FelloColors.accentSoft : FelloColors.paper,
+              color: chipBg,
               borderRadius: BorderRadius.circular(6),
-              border: published
-                  ? null
-                  : Border.all(color: FelloColors.border),
+              border: chipBorder
+                  ? Border.all(color: FelloColors.border)
+                  : null,
             ),
             child: Text(
-              published ? 'Published' : 'Draft',
-              style: FelloTypography.chip(context).copyWith(
-                color: published ? FelloColors.accentDeep : FelloColors.inkSoft,
-              ),
+              form.statusLabel,
+              style: FelloTypography.chip(context).copyWith(color: chipFg),
             ),
           ),
-          const SizedBox(width: 6),
-          Icon(
-            Icons.chevron_right,
-            size: compact ? 18 : 20,
-            color: FelloColors.chartMuted,
+          const SizedBox(width: 4),
+          PopupMenuButton<String>(
+            tooltip: 'Survey actions',
+            onSelected: (value) {
+              switch (value) {
+                case 'toggle':
+                  onToggle();
+                case 'delete':
+                  onDelete?.call();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'toggle',
+                child: Text(form.isPublished ? 'Turn off' : 'Turn on'),
+              ),
+              if (canDelete)
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Text('Delete'),
+                ),
+            ],
+            icon: Icon(
+              Icons.more_vert,
+              size: compact ? 18 : 20,
+              color: FelloColors.inkSoft,
+            ),
           ),
         ],
       ),

@@ -2,7 +2,7 @@ import 'package:equatable/equatable.dart';
 
 import 'question.dart';
 
-enum FormStatus { draft, published }
+enum FormStatus { draft, published, deleted }
 
 class FeedbackForm extends Equatable {
   const FeedbackForm({
@@ -34,6 +34,17 @@ class FeedbackForm extends Equatable {
   final bool orgAllowsLogo;
 
   bool get isPublished => status == FormStatus.published;
+
+  bool get isDeleted => status == FormStatus.deleted;
+
+  /// Live public link is off (draft or deleted).
+  bool get isOff => status != FormStatus.published;
+
+  String get statusLabel => switch (status) {
+        FormStatus.published => 'Published',
+        FormStatus.draft => 'Off',
+        FormStatus.deleted => 'Deleted',
+      };
 
   bool get displaysOrgLogo =>
       orgAllowsLogo &&

@@ -17,6 +17,7 @@ class FormsBloc extends Bloc<FormsEvent, FormsState> {
     on<FormSelected>(_onSelected);
     on<FormUpdated>(_onUpdated);
     on<FormPublishRequested>(_onPublish);
+    on<FormUnpublishRequested>(_onUnpublish);
     on<FormDeleteRequested>(_onDelete);
     on<QuestionUpsertRequested>(_onUpsertQuestion);
     on<QuestionDeleteRequested>(_onDeleteQuestion);
@@ -129,23 +130,53 @@ class FormsBloc extends Bloc<FormsEvent, FormsState> {
   ) async {
     emit(state.copyWith(status: FormsStatus.saving, clearError: true));
     try {
-      // Save title/description first, then publish — same handler so a
-      // concurrent FormUpdated cannot overwrite status back to draft.
-      await _formRepository.updateForm(event.form);
+      // Save title/description first when editing; skip for quick toggle-on
+      // from the list when content is unchanged.
+      if (!event.form.isDeleted) {
+        await _formRepository.updateForm(event.form);
+      }
       final published = await _formRepository.publishForm(event.form.id);
       final forms = await _formRepository.listForms(published.orgId);
+      final fromEditor = state.selected?.id == published.id;
       emit(
         state.copyWith(
           status: FormsStatus.ready,
           forms: forms,
-          selected: published,
-          justPublished: true,
+          selected: fromEditor ? published : state.selected,
+          justPublished: fromEditor,
         ),
       );
     } catch (e) {
       emit(
         state.copyWith(
           status: FormsStatus.failure,
+          errorMessage: e.toString(),
+        ),
+      );
+    }
+  }
+
+  Future<void> _onUnpublish(
+    FormUnpublishRequested event,
+    Emitter<FormsState> emit,
+  ) async {
+    final orgId = state.orgId;
+    if (orgId == null) return;
+    emit(state.copyWith(status: FormsStatus.saving, clearError: true));
+    try {
+      final updated = await _formRepository.unpublishForm(event.formId);
+      final forms = await _formRepository.listForms(orgId);
+      emit(
+        state.copyWith(
+          status: FormsStatus.ready,
+          forms: forms,
+          selected: state.selected?.id == updated.id ? updated : state.selected,
+        ),
+      );
+    } catch (e) {
+      emit(
+        state.copyWith(
+          status: FormsStatus.ready,
           errorMessage: e.toString(),
         ),
       );
@@ -160,13 +191,13 @@ class FormsBloc extends Bloc<FormsEvent, FormsState> {
     if (orgId == null) return;
     emit(state.copyWith(status: FormsStatus.saving, clearError: true));
     try {
-      await _formRepository.deleteForm(event.formId);
+      final deleted = await _formRepository.deleteForm(event.formId);
       final forms = await _formRepository.listForms(orgId);
       emit(
         state.copyWith(
           status: FormsStatus.ready,
           forms: forms,
-          clearSelected: state.selected?.id == event.formId,
+          selected: state.selected?.id == deleted.id ? deleted : state.selected,
         ),
       );
     } on AuthPermissionFailure catch (e) {

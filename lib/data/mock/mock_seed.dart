@@ -22,7 +22,7 @@ class MockSeedData {
       createdAt: now.subtract(const Duration(days: 40)),
       businessType: BusinessType.restaurantCafe,
       onboardingCompletedAt: now.subtract(const Duration(days: 40)),
-      planId: PlanId.starter,
+      planId: PlanId.growth,
     );
 
     profile = Profile(

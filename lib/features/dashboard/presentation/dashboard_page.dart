@@ -203,7 +203,8 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
                       ),
                     ),
-                  if (stats != null) ...[
+                  // No vanity empty KPIs — wait until customers have responded.
+                  if (stats != null && analytics.totalResponses > 0) ...[
                     SoftPadding(
                       padding: const EdgeInsets.fromLTRB(28, 18, 28, 0),
                       child: FadeSlideIn(
@@ -227,7 +228,11 @@ class _DashboardPageState extends State<DashboardPage> {
                         padding: EdgeInsets.only(bottom: 36),
                         child: SizedBox.shrink(),
                       ),
-                  ],
+                  ] else
+                    const SoftPadding(
+                      padding: EdgeInsets.only(bottom: 36),
+                      child: SizedBox.shrink(),
+                    ),
                 ],
               ],
             ),
@@ -309,14 +314,14 @@ class _DashboardAnalytics {
   });
 
   final double? nps;
-  final int npsDelta;
+  final int? npsDelta;
   final double? avgRating;
-  final int ratingDelta;
+  final int? ratingDelta;
   final int totalResponses;
   final String responseRate;
-  final int responseDelta;
+  final int? responseDelta;
   final double completionRate;
-  final int completionDelta;
+  final int? completionDelta;
   final List<double?> npsByMonth;
   final int promoters;
   final int passives;
@@ -388,26 +393,49 @@ class _DashboardAnalytics {
       heatmap.add(_HeatRow(label: form.title, values: cells));
     }
 
-    // Simple deltas vs previous half of the window for visual polish.
+    // Real deltas only when both halves of the window have signal.
     final mid = responses.length ~/ 2;
     final recent = responses.take(mid == 0 ? responses.length : mid).toList();
     final older = responses.skip(mid).toList();
     final recentNps = _avgNps(recent, forms);
     final olderNps = _avgNps(older, forms);
-    final npsDelta = (recentNps == null || olderNps == null)
-        ? 6
+    final npsDelta = (recentNps == null || olderNps == null || mid == 0)
+        ? null
         : (recentNps - olderNps).round();
+
+    final recentRatings = recent
+        .map(_ratingOf)
+        .whereType<double>()
+        .toList();
+    final olderRatings = older
+        .map(_ratingOf)
+        .whereType<double>()
+        .toList();
+    final ratingDelta =
+        (mid == 0 || recentRatings.isEmpty || olderRatings.isEmpty)
+            ? null
+            : ((recentRatings.reduce((a, b) => a + b) / recentRatings.length) -
+                    (olderRatings.reduce((a, b) => a + b) / olderRatings.length))
+                .round();
+
+    final responseDelta = mid == 0 ? null : recent.length - older.length;
+    int promoterCount(List<FeedbackResponse> list) => list.where((r) {
+          final n = _npsOf(r, forms);
+          return n != null && n >= 9;
+        }).length;
+    final completionDelta =
+        mid == 0 ? null : promoterCount(recent) - promoterCount(older);
 
     return _DashboardAnalytics(
       nps: stats?.npsScore ?? (allNps.isEmpty ? null : _npsScore(allNps)),
       npsDelta: npsDelta,
       avgRating: stats?.averageRating,
-      ratingDelta: 3,
+      ratingDelta: ratingDelta,
       totalResponses: stats?.totalResponses ?? responses.length,
       responseRate: stats?.responseRateLabel ?? 'Live',
-      responseDelta: -4,
+      responseDelta: responseDelta,
       completionRate: responses.isEmpty ? 0 : 68,
-      completionDelta: 2,
+      completionDelta: completionDelta,
       npsByMonth: npsByMonth,
       promoters: promoters,
       passives: passives,
@@ -428,6 +456,17 @@ class _DashboardAnalytics {
             return (a.value as num).toInt();
           }
         }
+      }
+    }
+    return null;
+  }
+
+  static double? _ratingOf(FeedbackResponse r) {
+    for (final a in r.answers) {
+      if (a.value is num) {
+        final v = (a.value as num).toDouble();
+        // Star ratings are 1–5; prefer those when present.
+        if (v >= 1 && v <= 5) return v;
       }
     }
     return null;
@@ -716,14 +755,11 @@ class _KpiRow extends StatelessWidget {
           _KpiCard(
             label: 'Responses',
             value: '${analytics.totalResponses}',
-            delta: analytics.responseDelta.abs() > 0
-                ? analytics.completionDelta
-                : 2,
+            delta: analytics.responseDelta,
           ),
           _KpiCard(
             label: 'Needs attention',
             value: '${analytics.detractors}',
-            delta: analytics.responseDelta,
           ),
         ];
 
@@ -760,16 +796,17 @@ class _KpiCard extends StatelessWidget {
   const _KpiCard({
     required this.label,
     required this.value,
-    required this.delta,
+    this.delta,
   });
 
   final String label;
   final String value;
-  final int delta;
+  final int? delta;
 
   @override
   Widget build(BuildContext context) {
-    final up = delta >= 0;
+    final deltaValue = delta;
+    final up = (deltaValue ?? 0) >= 0;
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
       decoration: BoxDecoration(
@@ -808,25 +845,27 @@ class _KpiCard extends StatelessWidget {
                   color: FelloColors.ink,
                 ),
               ),
-              const Spacer(),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: up
-                      ? FelloColors.accentSoft
-                      : const Color(0x14E85D4C),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '${up ? '+' : ''}$delta pts',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: up ? FelloColors.accentDeep : FelloColors.danger,
+              if (deltaValue != null) ...[
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: up
+                        ? FelloColors.accentSoft
+                        : const Color(0x14E85D4C),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '${up ? '+' : ''}$deltaValue pts',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: up ? FelloColors.accentDeep : FelloColors.danger,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ],

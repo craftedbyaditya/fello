@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import '../../domain/entities/app_notification.dart';
+import '../../domain/entities/complaint_task.dart';
+import '../../domain/entities/feedback_analysis.dart';
 import '../../domain/entities/feedback_form.dart';
 import '../../domain/entities/org_invite.dart';
 import '../../domain/entities/organization.dart';
@@ -27,6 +30,11 @@ class MockStore {
   final List<FeedbackForm> forms = [];
   final List<FeedbackResponse> responses = [];
   final List<OrgInvite> invites = [];
+  final List<FeedbackAnalysis> analyses = [];
+  final List<ComplaintTask> complaintTasks = [];
+  final List<TaskComment> taskComments = [];
+  final List<AppNotification> notifications = [];
+  final Set<String> processedAiResponseIds = {};
 
   /// clientKey|formId → (windowStart, count)
   final Map<String, (DateTime, int)> submitRateWindows = {};

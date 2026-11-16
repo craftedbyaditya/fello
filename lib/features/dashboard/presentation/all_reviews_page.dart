@@ -196,7 +196,26 @@ class _AllReviewsPageState extends State<AllReviewsPage> {
                           children: [
                             for (var i = 0; i < reviews.length; i++) ...[
                               if (i > 0) const SizedBox(height: 12),
-                              ReviewCard(review: reviews[i]),
+                              ReviewCard(
+                                review: reviews[i],
+                                onVisibilityChanged: () {
+                                  final orgId = context
+                                          .read<DashboardBloc>()
+                                          .state
+                                          .orgId ??
+                                      context
+                                          .read<AuthBloc>()
+                                          .state
+                                          .session
+                                          ?.organization
+                                          .id;
+                                  if (orgId != null) {
+                                    context
+                                        .read<DashboardBloc>()
+                                        .add(DashboardLoadRequested(orgId));
+                                  }
+                                },
+                              ),
                             ],
                           ],
                         ),

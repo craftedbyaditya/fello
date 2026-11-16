@@ -14,7 +14,12 @@ abstract class FormRepository {
 
   Future<FeedbackForm> updateForm(FeedbackForm form);
   Future<FeedbackForm> publishForm(String formId);
-  Future<void> deleteForm(String formId);
+
+  /// Turns the public link off (draft). Does not soft-delete.
+  Future<FeedbackForm> unpublishForm(String formId);
+
+  /// Soft-delete — survey stays in the list with Deleted status.
+  Future<FeedbackForm> deleteForm(String formId);
 
   Future<Question> upsertQuestion(Question question);
   Future<void> deleteQuestion(String questionId);

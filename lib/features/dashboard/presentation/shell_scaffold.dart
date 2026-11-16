@@ -67,7 +67,6 @@ class ShellScaffold extends StatelessWidget {
             _SideNav(
               selectedIndex: shellIndex,
               onSelect: onSelect,
-              isAdmin: isAdmin,
               userName: session?.profile.displayName ?? 'User',
               onSignOut: () => _confirmSignOut(context),
             ),
@@ -118,27 +117,27 @@ class ShellScaffold extends StatelessWidget {
           child: FelloLogo(size: 26),
         ),
         actions: [
-          if (isAdmin)
-            PopupMenuButton<String>(
-              tooltip: 'Workspace',
-              onSelected: (value) {
-                switch (value) {
-                  case 'team':
-                    context.go('/team');
-                  case 'billing':
-                    context.go('/settings/billing');
-                  case 'logo':
-                    context.go('/settings/logo');
-                }
-              },
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'team', child: Text('Team')),
-                PopupMenuItem(
-                    value: 'billing', child: Text('Subscription')),
-                PopupMenuItem(value: 'logo', child: Text('Logo')),
+          PopupMenuButton<String>(
+            tooltip: 'Workspace',
+            onSelected: (value) {
+              switch (value) {
+                case 'team':
+                  context.go('/team');
+                case 'settings':
+                  context.go('/settings');
+                case 'billing':
+                  context.go('/settings/billing');
+                case 'logo':
+                  context.go('/settings/logo');
+              }
+            },
+            itemBuilder: (context) => [
+              if (isAdmin) ...const [
+                PopupMenuItem(value: 'settings', child: Text('Settings')),
               ],
-              icon: const Icon(Icons.more_horiz, color: FelloColors.ink),
-            ),
+            ],
+            icon: const Icon(Icons.more_horiz, color: FelloColors.ink),
+          ),
           const _HelpAndVersionActions(),
           IconButton(
             tooltip: 'Sign out',
@@ -165,13 +164,14 @@ class _TopAppBar extends StatelessWidget {
         width: double.infinity,
         decoration: const BoxDecoration(
           color: FelloColors.paper,
-          border: Border(
-            bottom: BorderSide(color: FelloColors.border),
-          ),
+          border: Border(bottom: BorderSide(color: FelloColors.border)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 12),
         alignment: Alignment.centerRight,
-        child: const _HelpAndVersionActions(),
+        child: const Align(
+          alignment: Alignment.centerRight,
+          child: _HelpAndVersionActions(),
+        ),
       ),
     );
   }
@@ -229,6 +229,20 @@ class _HelpAndVersionActions extends StatelessWidget {
             ),
           ),
         ),
+        if (isAdmin) const SizedBox(width: 8),
+        if (isAdmin)
+          IconButton(
+            tooltip: 'Settings',
+            onPressed: () => context.go('/settings'),
+            iconSize: 18,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(
+              Icons.settings_outlined,
+              size: 18,
+              color: FelloColors.accent,
+            ),
+          ),
+        const SizedBox(width: 8),
         IconButton(
           tooltip: 'Help',
           onPressed: () => _showHelp(context),
@@ -272,14 +286,12 @@ class _SideNav extends StatelessWidget {
   const _SideNav({
     required this.selectedIndex,
     required this.onSelect,
-    required this.isAdmin,
     required this.userName,
     required this.onSignOut,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onSelect;
-  final bool isAdmin;
   final String userName;
   final VoidCallback onSignOut;
 
@@ -300,9 +312,7 @@ class _SideNav extends StatelessWidget {
             alignment: Alignment.centerLeft,
             decoration: const BoxDecoration(
               color: FelloColors.paper,
-              border: Border(
-                bottom: BorderSide(color: FelloColors.border),
-              ),
+              border: Border(bottom: BorderSide(color: FelloColors.border)),
             ),
             child: const FittedBox(
               fit: BoxFit.contain,
@@ -328,27 +338,6 @@ class _SideNav extends StatelessWidget {
                     selected: selectedIndex == 1,
                     onTap: () => onSelect(1),
                   ),
-                  if (isAdmin) ...[
-                    const SizedBox(height: 8),
-                    _NavItem(
-                      icon: Icons.group_outlined,
-                      label: 'Team',
-                      selected: selectedIndex == 2,
-                      onTap: () => onSelect(2),
-                    ),
-                    _NavItem(
-                      icon: Icons.image_outlined,
-                      label: 'Logo',
-                      selected: selectedIndex == 3,
-                      onTap: () => onSelect(3),
-                    ),
-                    _NavItem(
-                      icon: Icons.credit_card_outlined,
-                      label: 'Subscription',
-                      selected: selectedIndex == 4,
-                      onTap: () => onSelect(4),
-                    ),
-                  ],
                   const Spacer(),
                   const Divider(height: 1, color: FelloColors.border),
                   const SizedBox(height: 16),
@@ -438,15 +427,21 @@ class _NavItem extends StatelessWidget {
                 Icon(
                   icon,
                   size: 18,
-                  color: selected ? FelloColors.accentDeep : FelloColors.inkSoft,
+                  color: selected
+                      ? FelloColors.accentDeep
+                      : FelloColors.inkSoft,
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    color: selected ? FelloColors.accentDeep : FelloColors.ink,
-                    fontSize: 14,
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      color: selected
+                          ? FelloColors.accentDeep
+                          : FelloColors.ink,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
               ],

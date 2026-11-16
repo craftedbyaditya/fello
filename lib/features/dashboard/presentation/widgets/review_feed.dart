@@ -1,12 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../../../core/di/service_locator.dart';
 import '../../../../core/theme/fello_colors.dart';
 import '../../../../core/theme/fello_metrics.dart';
+import '../../../../domain/entities/complaint_task.dart';
+import '../../../../domain/entities/feedback_analysis.dart';
 import '../../../../domain/entities/feedback_form.dart';
 import '../../../../domain/entities/question.dart';
 import '../../../../domain/entities/response.dart';
+import '../../../../domain/repositories/response_repository.dart';
+import '../../../../domain/repositories/workflow_repository.dart';
+import '../../../../shared/widgets/kaydo_toast.dart';
+import '../../../auth/bloc/auth_bloc.dart';
+import '../../../complaints/presentation/widgets/ai_insight_panel.dart';
 
 const reviewStarYellow = Color(0xFFF5C518);
 
@@ -61,19 +72,23 @@ class ReviewAnswer {
 class ReviewItem {
   const ReviewItem({
     required this.id,
+    required this.formId,
     required this.displayName,
     required this.submittedAt,
     required this.location,
     required this.stars,
     required this.answers,
+    this.isPublic = false,
   });
 
   final String id;
+  final String formId;
   final String displayName;
   final DateTime submittedAt;
   final String location;
   final int stars;
   final List<ReviewAnswer> answers;
+  final bool isPublic;
 
   bool get hasTextAnswer => answers.any(
         (a) =>
@@ -217,6 +232,7 @@ class ReviewSummary {
       reviews.add(
         ReviewItem(
           id: response.id,
+          formId: form.id,
           displayName: metaName is String && metaName.trim().isNotEmpty
               ? metaName.trim()
               : 'Respondent ${index + 1}',
@@ -226,6 +242,7 @@ class ReviewSummary {
               : 'Web',
           stars: stars,
           answers: mappedAnswers,
+          isPublic: response.isPublic,
         ),
       );
     }
@@ -335,93 +352,229 @@ String reviewInitials(String name) {
 
 Future<void> showReviewDetailDialog(
   BuildContext context,
-  ReviewItem review,
-) {
-  final date = DateFormat('MMMM d, y').format(review.submittedAt);
-  final initials = reviewInitials(review.displayName);
-
+  ReviewItem review, {
+  VoidCallback? onVisibilityChanged,
+}) {
   return showDialog<void>(
     context: context,
-    builder: (context) {
-      final maxHeight = MediaQuery.sizeOf(context).height * 0.8;
-      return Dialog(
-        shape: FelloMetrics.dialogShape,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: 560, maxHeight: maxHeight),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(22, 20, 14, 0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundColor: FelloColors.accentSoft,
-                      child: Text(
-                        initials,
-                        style: const TextStyle(
-                          color: FelloColors.accentDeep,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
+    builder: (context) => _ReviewDetailDialog(
+      review: review,
+      onVisibilityChanged: onVisibilityChanged,
+    ),
+  );
+}
+
+class _ReviewDetailDialog extends StatefulWidget {
+  const _ReviewDetailDialog({
+    required this.review,
+    this.onVisibilityChanged,
+  });
+
+  final ReviewItem review;
+  final VoidCallback? onVisibilityChanged;
+
+  @override
+  State<_ReviewDetailDialog> createState() => _ReviewDetailDialogState();
+}
+
+class _ReviewDetailDialogState extends State<_ReviewDetailDialog> {
+  late bool _isPublic = widget.review.isPublic;
+  bool _saving = false;
+
+  Future<void> _togglePublic(bool value) async {
+    setState(() => _saving = true);
+    try {
+      await getIt<ResponseRepository>().setResponsePublic(
+        responseId: widget.review.id,
+        isPublic: value,
+      );
+      if (!mounted) return;
+      setState(() {
+        _isPublic = value;
+        _saving = false;
+      });
+      widget.onVisibilityChanged?.call();
+      showKaydoToast(
+        context,
+        message: value ? 'Marked Public for API' : 'Marked Private',
+        tone: KaydoToastTone.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      showKaydoToast(
+        context,
+        message: e.toString().replaceFirst(RegExp(r'^[^:]+:\s*'), ''),
+        tone: KaydoToastTone.error,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final review = widget.review;
+    final date = DateFormat('MMMM d, y').format(review.submittedAt);
+    final initials = reviewInitials(review.displayName);
+    final isAdmin =
+        context.watch<AuthBloc>().state.session?.profile.isAdmin ?? false;
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.8;
+
+    return Dialog(
+      shape: FelloMetrics.dialogShape,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 560, maxHeight: maxHeight),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 20, 14, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: FelloColors.accentSoft,
+                    child: Text(
+                      initials,
+                      style: const TextStyle(
+                        color: FelloColors.accentDeep,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          review.displayName,
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: FelloColors.ink,
+                          ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            review.displayName,
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: FelloColors.ink,
-                            ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$date · ${review.location}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12.5,
+                            color: FelloColors.inkSoft,
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '$date · ${review.location}',
-                            style: GoogleFonts.poppins(
-                              fontSize: 12.5,
-                              color: FelloColors.inkSoft,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Close',
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close_rounded, size: 20),
-                    ),
-                  ],
-                ),
-              ),
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (var i = 0; i < review.answers.length; i++) ...[
-                        if (i > 0) const SizedBox(height: 14),
-                        _ReviewAnswerBlock(answer: review.answers[i]),
+                        ),
                       ],
-                    ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                  ),
+                ],
+              ),
+            ),
+            if (isAdmin)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 12, 22, 0),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: FelloColors.border),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      _isPublic ? 'Public' : 'Private',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    subtitle: Text(
+                      _isPublic
+                          ? 'Included in Reviews API responses'
+                          : 'Hidden from Reviews API',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: FelloColors.inkSoft,
+                      ),
+                    ),
+                    value: _isPublic,
+                    activeThumbColor: FelloColors.accent,
+                    onChanged: _saving ? null : _togglePublic,
                   ),
                 ),
               ),
-            ],
-          ),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _AiInsightLoader(
+                      responseId: review.id,
+                      formId: review.formId,
+                    ),
+                    const SizedBox(height: 14),
+                    for (var i = 0; i < review.answers.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 14),
+                      _ReviewAnswerBlock(answer: review.answers[i]),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-      );
-    },
-  );
+      ),
+    );
+  }
+}
+
+class _AiInsightLoader extends StatelessWidget {
+  const _AiInsightLoader({
+    required this.responseId,
+    required this.formId,
+  });
+
+  final String responseId;
+  final String formId;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!getIt.isRegistered<WorkflowRepository>()) {
+      return const SizedBox.shrink();
+    }
+    final repo = getIt<WorkflowRepository>();
+    return FutureBuilder<({FeedbackAnalysis? a, ComplaintTask? t})>(
+      future: () async {
+        final a = await repo.getAnalysisForResponse(responseId);
+        final t = await repo.getTaskForResponse(responseId);
+        return (a: a, t: t);
+      }(),
+      builder: (context, snap) {
+        final data = snap.data;
+        if (data?.a == null) return const SizedBox.shrink();
+        return AiInsightPanel(
+          analysis: data!.a!,
+          task: data.t,
+          onOpenTask: data.t == null
+              ? null
+              : () {
+                  final taskId = data.t!.id;
+                  Navigator.pop(context);
+                  context.go('/dashboard/reviews/$formId?task=$taskId');
+                },
+        );
+      },
+    );
+  }
 }
 
 class _ReviewAnswerBlock extends StatelessWidget {
@@ -473,9 +626,14 @@ class _ReviewAnswerBlock extends StatelessWidget {
 }
 
 class ReviewCard extends StatelessWidget {
-  const ReviewCard({super.key, required this.review});
+  const ReviewCard({
+    super.key,
+    required this.review,
+    this.onVisibilityChanged,
+  });
 
   final ReviewItem review;
+  final VoidCallback? onVisibilityChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -487,7 +645,11 @@ class ReviewCard extends StatelessWidget {
       color: FelloColors.paper,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
-        onTap: () => showReviewDetailDialog(context, review),
+        onTap: () => showReviewDetailDialog(
+          context,
+          review,
+          onVisibilityChanged: onVisibilityChanged,
+        ),
         borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -514,13 +676,40 @@ class ReviewCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      review.displayName,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: FelloColors.ink,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            review.displayName,
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: FelloColors.ink,
+                            ),
+                          ),
+                        ),
+                        if (review.isPublic) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: FelloColors.accentSoft,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'Public',
+                              style: GoogleFonts.poppins(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: FelloColors.accentDeep,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 3),
                     Text(

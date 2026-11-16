@@ -78,7 +78,7 @@ class AppConfig {
       throw StateError(
         'Kaydo requires TURNSTILE_SITE_KEY for public form bot protection.\n'
         'Create a Cloudflare Turnstile widget, set the site key as a dart-define, '
-        'deploy submit-feedback with TURNSTILE_SECRET_KEY '
+        'and configure the server-side Turnstile secret for submit-feedback '
         '(see deploy/SUPABASE_SETUP.md).',
       );
     }

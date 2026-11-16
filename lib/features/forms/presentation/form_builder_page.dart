@@ -187,170 +187,101 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const SizedBox(height: 12),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: FelloBackButton(
-                              tooltip: 'Back to forms',
-                              onPressed: () => context.go('/forms'),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            form.title.isEmpty ? 'Untitled form' : form.title,
-                            style: FelloTypography.pageTitle(context),
-                          ),
-                          const SizedBox(height: 20),
-                          FelloTextField(
-                            label: 'Title',
-                            controller: _title,
-                          ),
                           const SizedBox(height: 16),
-                          FelloTextField(
-                            label: 'Description (optional)',
-                            controller: _description,
-                            maxLines: 3,
-                          ),
-                          const SizedBox(height: 24),
-                          const Divider(height: 1),
-                          const SizedBox(height: 24),
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
+                              FelloBackButton(
+                                tooltip: 'Back to forms',
+                                onPressed: () => context.go('/forms'),
+                              ),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'Questions',
-                                  style: theme.textTheme.titleLarge,
+                                  form.title.isEmpty
+                                      ? 'Untitled form'
+                                      : form.title,
+                                  style: FelloTypography.pageTitle(context),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                              FilledButton(
-                                onPressed: () => _addQuestion(form),
-                                child: const Text('Add question'),
                               ),
                             ],
                           ),
-                          if (form.questions.isEmpty)
-                            const SizedBox(height: 8)
-                          else ...[
-                            const SizedBox(height: 12),
-                            ...form.questions.map(
-                              (q) => Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: FelloColors.paper,
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: FelloColors.border,
-                                    ),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              q.label,
-                                              style: theme
-                                                  .textTheme.titleLarge
-                                                  ?.copyWith(fontSize: 16),
-                                            ),
-                                          ),
-                                          IconButton(
-                                            tooltip: 'Edit',
-                                            onPressed: () =>
-                                                _editQuestion(q),
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            icon: const Icon(
-                                              Icons.edit_outlined,
-                                              color: FelloColors.inkSoft,
-                                            ),
-                                          ),
-                                          if (isAdmin)
-                                            IconButton(
-                                              tooltip: 'Delete',
-                                              onPressed: () => context
-                                                  .read<FormsBloc>()
-                                                  .add(
-                                                    QuestionDeleteRequested(
-                                                      q.id,
-                                                    ),
-                                                  ),
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              icon: const Icon(
-                                                Icons.delete_outline,
-                                                color: FelloColors.danger,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        children: [
-                                          Container(
-                                            padding:
-                                                const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: FelloColors.accentSoft,
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: Text(
-                                              _typeLabel(q.type),
-                                              style: theme
-                                                  .textTheme.labelLarge
-                                                  ?.copyWith(
-                                                color:
-                                                    FelloColors.accentDeep,
-                                                fontSize: 11,
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: q.required
-                                                  ? const Color(0xFFFFF1E8)
-                                                  : const Color(0xFFF3F4F6),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: Text(
-                                              q.required
-                                                  ? 'Required'
-                                                  : 'Optional',
-                                              style: theme
-                                                  .textTheme.labelLarge
-                                                  ?.copyWith(
-                                                color: q.required
-                                                    ? const Color(0xFFC2410C)
-                                                    : FelloColors.inkSoft,
-                                                fontSize: 11,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
+                          const SizedBox(height: 18),
+                          _SectionBox(
+                            title: 'General details',
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                FelloTextField(
+                                  label: 'Title',
+                                  controller: _title,
                                 ),
+                                const SizedBox(height: 14),
+                                FelloTextField(
+                                  label: 'Description (optional)',
+                                  controller: _description,
+                                  maxLines: 3,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _SectionBox(
+                            title: 'Questions',
+                            trailing: SizedBox(
+                              height: FelloMetrics.controlHeight,
+                              child: FilledButton(
+                                onPressed: () => _addQuestion(form),
+                                style: FilledButton.styleFrom(
+                                  minimumSize: FelloMetrics.controlMinSize,
+                                  maximumSize: FelloMetrics.controlMaxSize,
+                                  fixedSize: const Size.fromHeight(
+                                    FelloMetrics.controlHeight,
+                                  ),
+                                  padding: FelloMetrics.controlPaddingH,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                child: const Text('Add question'),
                               ),
                             ),
-                          ],
+                            child: form.questions.isEmpty
+                                ? Text(
+                                    'No questions yet. Add your first question to start collecting feedback.',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: FelloColors.inkSoft,
+                                    ),
+                                  )
+                                : Column(
+                                    children: [
+                                      for (var i = 0;
+                                          i < form.questions.length;
+                                          i++) ...[
+                                        if (i > 0) const SizedBox(height: 8),
+                                        _QuestionTile(
+                                          question: form.questions[i],
+                                          typeLabel: _typeLabel(
+                                            form.questions[i].type,
+                                          ),
+                                          canDelete: isAdmin,
+                                          onEdit: () => _editQuestion(
+                                            form.questions[i],
+                                          ),
+                                          onDelete: () => context
+                                              .read<FormsBloc>()
+                                              .add(
+                                                QuestionDeleteRequested(
+                                                  form.questions[i].id,
+                                                ),
+                                              ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                          ),
                         ],
                       ),
                     ),
@@ -367,6 +298,177 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
           ),
         );
       },
+    );
+  }
+}
+
+class _SectionBox extends StatelessWidget {
+  const _SectionBox({
+    required this.title,
+    required this.child,
+    this.trailing,
+  });
+
+  final String title;
+  final Widget child;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+      decoration: BoxDecoration(
+        color: FelloColors.paper,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: FelloColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.titleLarge?.copyWith(fontSize: 17),
+                ),
+              ),
+              ?trailing,
+            ],
+          ),
+          const SizedBox(height: 14),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _QuestionTile extends StatelessWidget {
+  const _QuestionTile({
+    required this.question,
+    required this.typeLabel,
+    required this.canDelete,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final Question question;
+  final String typeLabel;
+  final bool canDelete;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAF9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: FelloColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  question.label,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    _Tag(
+                      label: typeLabel,
+                      background: FelloColors.accentSoft,
+                      foreground: FelloColors.accentDeep,
+                    ),
+                    _Tag(
+                      label: question.required ? 'Required' : 'Optional',
+                      background: question.required
+                          ? const Color(0xFFFFF1E8)
+                          : const Color(0xFFF3F4F6),
+                      foreground: question.required
+                          ? const Color(0xFFC2410C)
+                          : FelloColors.inkSoft,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Edit',
+            onPressed: onEdit,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            padding: EdgeInsets.zero,
+            icon: const Icon(
+              Icons.edit_outlined,
+              size: 18,
+              color: FelloColors.inkSoft,
+            ),
+          ),
+          if (canDelete)
+            IconButton(
+              tooltip: 'Delete',
+              onPressed: onDelete,
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              padding: EdgeInsets.zero,
+              icon: const Icon(
+                Icons.delete_outline,
+                size: 18,
+                color: FelloColors.danger,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Tag extends StatelessWidget {
+  const _Tag({
+    required this.label,
+    required this.background,
+    required this.foreground,
+  });
+
+  final String label;
+  final Color background;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: foreground,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }

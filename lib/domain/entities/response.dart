@@ -26,6 +26,7 @@ class FeedbackResponse extends Equatable {
     required this.submittedAt,
     this.metadata = const {},
     this.answers = const [],
+    this.isPublic = false,
   });
 
   final String id;
@@ -34,12 +35,16 @@ class FeedbackResponse extends Equatable {
   final Map<String, dynamic> metadata;
   final List<Answer> answers;
 
+  /// Admin-approved for Reviews API / public display.
+  final bool isPublic;
+
   FeedbackResponse copyWith({
     String? id,
     String? formId,
     DateTime? submittedAt,
     Map<String, dynamic>? metadata,
     List<Answer>? answers,
+    bool? isPublic,
   }) {
     return FeedbackResponse(
       id: id ?? this.id,
@@ -47,9 +52,11 @@ class FeedbackResponse extends Equatable {
       submittedAt: submittedAt ?? this.submittedAt,
       metadata: metadata ?? this.metadata,
       answers: answers ?? this.answers,
+      isPublic: isPublic ?? this.isPublic,
     );
   }
 
   @override
-  List<Object?> get props => [id, formId, submittedAt, metadata, answers];
+  List<Object?> get props =>
+      [id, formId, submittedAt, metadata, answers, isPublic];
 }

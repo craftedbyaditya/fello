@@ -71,10 +71,11 @@ void main() {
       expect(store.forms.any((f) => f.id == 'form_visit'), isTrue);
     });
 
-    test('admin can delete forms in their org', () async {
+    test('admin can soft-delete forms in their org', () async {
       store.setSession(adminSession());
-      await forms.deleteForm('form_draft');
-      expect(store.forms.any((f) => f.id == 'form_draft'), isFalse);
+      final deleted = await forms.deleteForm('form_draft');
+      expect(deleted.isDeleted, isTrue);
+      expect(store.forms.any((f) => f.id == 'form_draft' && f.isDeleted), isTrue);
     });
 
     test('employee cannot delete questions', () async {

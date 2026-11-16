@@ -105,8 +105,25 @@ class SupabaseFormRepository implements FormRepository {
   }
 
   @override
-  Future<void> deleteForm(String formId) async {
-    await _client.from('forms').delete().eq('id', formId);
+  Future<FeedbackForm> unpublishForm(String formId) async {
+    final row = await _client
+        .from('forms')
+        .update({'status': 'draft'})
+        .eq('id', formId)
+        .select('*, questions(*)')
+        .single();
+    return _mapForm(row);
+  }
+
+  @override
+  Future<FeedbackForm> deleteForm(String formId) async {
+    final row = await _client
+        .from('forms')
+        .update({'status': 'deleted'})
+        .eq('id', formId)
+        .select('*, questions(*)')
+        .single();
+    return _mapForm(row);
   }
 
   @override
@@ -168,9 +185,11 @@ class SupabaseFormRepository implements FormRepository {
       title: row['title'] as String,
       description: row['description'] as String? ?? '',
       slug: row['slug'] as String,
-      status: row['status'] == 'published'
-          ? FormStatus.published
-          : FormStatus.draft,
+      status: switch (row['status'] as String?) {
+        'published' => FormStatus.published,
+        'deleted' => FormStatus.deleted,
+        _ => FormStatus.draft,
+      },
       createdAt: DateTime.parse(row['created_at'] as String),
       questions: questions,
       orgLogoUrl: logoUrl,

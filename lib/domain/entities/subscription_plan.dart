@@ -1,21 +1,19 @@
 import 'package:equatable/equatable.dart';
 
 /// Kaydo monthly subscription catalog (INR).
-enum PlanId {
-  free,
-  starter,
-  growth,
-  custom,
-}
+enum PlanId { free, growth, pro }
 
 extension PlanIdX on PlanId {
   String get wireName => name;
 
   static PlanId fromWire(String? value) {
-    return PlanId.values.firstWhere(
-      (p) => p.name == value,
-      orElse: () => PlanId.free,
-    );
+    // Legacy values can exist while operators reconcile old subscriptions.
+    return switch (value) {
+      'growth' || 'starter' => PlanId.growth,
+      'pro' || 'custom' => PlanId.pro,
+      'free' => PlanId.free,
+      _ => PlanId.free,
+    };
   }
 }
 
@@ -72,81 +70,55 @@ class SubscriptionPlan extends Equatable {
   /// Workspace logo on public forms is a paid-plan feature.
   bool get allowsWorkspaceLogo => id != PlanId.free;
 
+  /// Reviews API + Developer Docs key management is Pro-only.
+  bool get allowsReviewsApi => id == PlanId.pro;
+
   static const free = SubscriptionPlan(
     id: PlanId.free,
     name: 'Free',
     tagline: 'Try Kaydo with light limits',
     priceInrMonthly: 0,
     maxSurveys: 1,
-    maxResponsesPerMonth: 50,
-    highlights: [
-      '1 survey',
-      '50 responses / month',
-      'Dashboard & exports',
-    ],
-  );
-
-  static const starter = SubscriptionPlan(
-    id: PlanId.starter,
-    name: 'Starter',
-    tagline: 'For a single location getting started',
-    priceInrMonthly: 99,
-    maxSurveys: 2,
-    maxResponsesPerMonth: 250,
-    highlights: [
-      '2 surveys',
-      '250 responses / month',
-      'Share links & QR',
-      'Team invites',
-      'Workspace logo',
-    ],
+    maxResponsesPerMonth: 75,
+    highlights: ['1 survey', '75 responses / month', 'Dashboard & exports'],
   );
 
   static const growth = SubscriptionPlan(
     id: PlanId.growth,
     name: 'Growth',
-    tagline: 'For growing multi-location teams',
+    tagline: 'For growing teams',
     priceInrMonthly: 499,
+    maxSurveys: 3,
+    maxResponsesPerMonth: 1000,
+    highlights: [
+      '3 published forms',
+      '1,000 responses / month',
+      '5 team members',
+      'Workspace logo',
+      '300 AI analyses / month',
+    ],
+  );
+
+  static const pro = SubscriptionPlan(
+    id: PlanId.pro,
+    name: 'Pro',
+    tagline: 'For established teams',
+    priceInrMonthly: 999,
     maxSurveys: 10,
-    maxResponsesPerMonth: 2500,
+    maxResponsesPerMonth: 5000,
     highlights: [
       '10 surveys',
-      '2,500 responses / month',
-      'Everything in Starter',
+      '5,000 responses / month',
+      '15 team members',
       'Workspace logo',
-      'Priority dashboard refresh',
+      'Reviews API',
+      '1,500 AI analyses / month',
     ],
   );
 
-  static const custom = SubscriptionPlan(
-    id: PlanId.custom,
-    name: 'Custom',
-    tagline: 'Higher volume & tailored limits',
-    priceInrMonthly: 999,
-    maxSurveys: null,
-    maxResponsesPerMonth: 10000,
-    isCustom: true,
-    highlights: [
-      'Unlimited surveys',
-      '10,000 responses / month',
-      'Workspace logo',
-      'Custom limits on request',
-      'Priority support',
-    ],
-  );
+  static const List<SubscriptionPlan> catalog = [free, growth, pro];
 
-  static const List<SubscriptionPlan> catalog = [
-    free,
-    starter,
-    growth,
-    custom,
-  ];
-
-  static const List<SubscriptionPlan> paidCatalog = [
-    starter,
-    growth,
-    custom,
-  ];
+  static const List<SubscriptionPlan> paidCatalog = [growth, pro];
 
   static SubscriptionPlan byId(PlanId id) {
     return catalog.firstWhere((p) => p.id == id, orElse: () => free);
@@ -154,15 +126,15 @@ class SubscriptionPlan extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        name,
-        tagline,
-        priceInrMonthly,
-        maxSurveys,
-        maxResponsesPerMonth,
-        highlights,
-        isCustom,
-      ];
+    id,
+    name,
+    tagline,
+    priceInrMonthly,
+    maxSurveys,
+    maxResponsesPerMonth,
+    highlights,
+    isCustom,
+  ];
 }
 
 class PlanUsage extends Equatable {
@@ -181,8 +153,7 @@ class PlanUsage extends Equatable {
   final DateTime periodEnd;
 
   bool get atSurveyLimit => !plan.allowsAnotherSurvey(surveyCount);
-  bool get atResponseLimit =>
-      !plan.allowsAnotherResponse(responsesThisMonth);
+  bool get atResponseLimit => !plan.allowsAnotherResponse(responsesThisMonth);
 
   double? get surveyProgress {
     final max = plan.maxSurveys;
@@ -197,6 +168,11 @@ class PlanUsage extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [plan, surveyCount, responsesThisMonth, periodStart, periodEnd];
+  List<Object?> get props => [
+    plan,
+    surveyCount,
+    responsesThisMonth,
+    periodStart,
+    periodEnd,
+  ];
 }

@@ -25,6 +25,25 @@ Sign up a real user → create surveys → publish → collect responses.
 
 Mock is opt-in only for tests: `--dart-define=DATA_SOURCE=mock`.
 
+## Run with Android Studio / Cursor Play button
+
+1. **Open the project root** (`fello/`) in Android Studio (Flutter plugin) or Cursor.
+2. Set Flutter SDK to FVM (Android Studio → Settings → Languages & Frameworks → Flutter):
+   - SDK path: `fello/.fvm/flutter_sdk` (or your FVM 3.47.9 path).
+3. Select device **Chrome** (web).
+4. Choose a run configuration:
+   - **Kaydo Web (mock)** — works immediately (no keys).
+   - **Kaydo Web (supabase)** — copy config first:
+
+```bash
+cp config/dart_defines.supabase.json.example config/dart_defines.supabase.json
+# edit SUPABASE_URL, SUPABASE_ANON_KEY, TURNSTILE_SITE_KEY
+```
+
+5. Press **Run / Play**.
+
+Configs live in `.idea/runConfigurations/` (Android Studio) and `.vscode/launch.json` (Cursor/VS Code).
+
 ## Project layout
 
 - `lib/domain` — entities + repository contracts
