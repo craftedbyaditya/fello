@@ -89,6 +89,19 @@ class ShellScaffold extends StatelessWidget {
     return Scaffold(
       backgroundColor: FelloColors.paper,
       body: navigationShell,
+      drawer: _MobileNavigationDrawer(
+        selectedIndex: shellIndex,
+        isAdmin: isAdmin,
+        onSelect: (index) {
+          Navigator.of(context).pop();
+          onSelect(index);
+        },
+        onSignOut: () {
+          Navigator.of(context).pop();
+          _confirmSignOut(context);
+        },
+        userName: session?.profile.displayName ?? 'User',
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: bottomIndex,
         onDestinationSelected: onSelect,
@@ -117,27 +130,6 @@ class ShellScaffold extends StatelessWidget {
           child: FelloLogo(size: 26),
         ),
         actions: [
-          PopupMenuButton<String>(
-            tooltip: 'Workspace',
-            onSelected: (value) {
-              switch (value) {
-                case 'team':
-                  context.go('/team');
-                case 'settings':
-                  context.go('/settings');
-                case 'billing':
-                  context.go('/settings/billing');
-                case 'logo':
-                  context.go('/settings/logo');
-              }
-            },
-            itemBuilder: (context) => [
-              if (isAdmin) ...const [
-                PopupMenuItem(value: 'settings', child: Text('Settings')),
-              ],
-            ],
-            icon: const Icon(Icons.more_horiz, color: FelloColors.ink),
-          ),
           const _HelpAndVersionActions(),
           IconButton(
             tooltip: 'Sign out',
@@ -321,10 +313,72 @@ class _SideNav extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Scrollbar(
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                      children: [
+                        _NavItem(
+                          icon: Icons.grid_view_rounded,
+                          label: 'Dashboard',
+                          selected: selectedIndex == 0,
+                          onTap: () => onSelect(0),
+                        ),
+                        _NavItem(
+                          icon: Icons.dynamic_form_outlined,
+                          label: 'Survey',
+                          selected: selectedIndex == 1,
+                          onTap: () => onSelect(1),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(height: 1, color: FelloColors.border),
+                _UserFooter(userName: userName, onSignOut: onSignOut),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MobileNavigationDrawer extends StatelessWidget {
+  const _MobileNavigationDrawer({
+    required this.selectedIndex,
+    required this.isAdmin,
+    required this.onSelect,
+    required this.onSignOut,
+    required this.userName,
+  });
+
+  final int selectedIndex;
+  final bool isAdmin;
+  final ValueChanged<int> onSelect;
+  final VoidCallback onSignOut;
+  final String userName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      backgroundColor: FelloColors.paper,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 16),
+              child: FelloLogo(size: 22),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(12),
                 children: [
                   _NavItem(
                     icon: Icons.grid_view_rounded,
@@ -338,62 +392,77 @@ class _SideNav extends StatelessWidget {
                     selected: selectedIndex == 1,
                     onTap: () => onSelect(1),
                   ),
-                  const Spacer(),
-                  const Divider(height: 1, color: FelloColors.border),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: FelloColors.accentSoft,
-                        child: Text(
-                          _initials(userName),
-                          style: const TextStyle(
-                            color: FelloColors.accentDeep,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          userName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            color: FelloColors.ink,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Sign out',
-                        onPressed: onSignOut,
-                        icon: const Icon(
-                          Icons.logout,
-                          size: 18,
-                          color: FelloColors.danger,
-                        ),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ],
-                  ),
+                  if (isAdmin)
+                    _NavItem(
+                      icon: Icons.settings_outlined,
+                      label: 'Settings',
+                      selected: selectedIndex == 7,
+                      onTap: () => onSelect(7),
+                    ),
                 ],
               ),
             ),
+            const Divider(height: 1),
+            _UserFooter(userName: userName, onSignOut: onSignOut),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UserFooter extends StatelessWidget {
+  const _UserFooter({required this.userName, required this.onSignOut});
+
+  final String userName;
+  final VoidCallback onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = userName.trim().split(RegExp(r'\s+'));
+    final initials = parts.isEmpty || parts.first.isEmpty
+        ? 'K'
+        : parts.length == 1
+        ? parts.first.substring(0, 1).toUpperCase()
+        : (parts.first[0] + parts.last[0]).toUpperCase();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 14, 10, 14),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: FelloColors.accentSoft,
+            child: Text(
+              initials,
+              style: const TextStyle(
+                color: FelloColors.accentDeep,
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              userName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: FelloColors.ink,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Sign out',
+            onPressed: onSignOut,
+            icon: const Icon(Icons.logout, size: 18, color: FelloColors.danger),
+            visualDensity: VisualDensity.compact,
           ),
         ],
       ),
     );
-  }
-
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty) return 'K';
-    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
-    return (parts.first[0] + parts.last[0]).toUpperCase();
   }
 }
 

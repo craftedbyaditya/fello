@@ -10,4 +10,17 @@ void main() {
     // from one made every narrow live viewport crash before sign-in rendered.
     expect(source, isNot(contains('WebDesktopOnlyGate')));
   });
+
+  test(
+    'workspace navigation keeps a scrollable desktop rail and mobile drawer',
+    () {
+      final source = File(
+        'lib/features/dashboard/presentation/shell_scaffold.dart',
+      ).readAsStringSync();
+
+      expect(source, contains('drawer: _MobileNavigationDrawer'));
+      expect(source, contains('child: Scrollbar('));
+      expect(source, contains('child: ListView('));
+    },
+  );
 }
