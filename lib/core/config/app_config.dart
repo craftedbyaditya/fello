@@ -14,7 +14,7 @@ class AppConfig {
   });
 
   /// Display version (matches `pubspec.yaml` version name).
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.0.1';
 
   final DataSource dataSource;
   final String supabaseUrl;
