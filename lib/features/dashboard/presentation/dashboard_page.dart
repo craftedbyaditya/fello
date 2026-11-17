@@ -182,6 +182,13 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
                       ),
                     ),
+                    if (state.status == DashboardStatus.failure)
+                      SoftPadding(
+                        padding: const EdgeInsets.fromLTRB(28, 0, 28, 12),
+                        child: _DashboardLoadErrorNotice(
+                          message: state.errorMessage,
+                        ),
+                      ),
                     if (progress.showChecklist)
                       SoftPadding(
                         padding: const EdgeInsets.fromLTRB(28, 0, 28, 12),
@@ -302,6 +309,31 @@ class _ZeroResponseHint extends StatelessWidget {
       ),
       child: Text(
         'Your surveys are ready. Share a published link to start collecting feedback.',
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: FelloColors.ink, fontWeight: FontWeight.w500),
+      ),
+    );
+  }
+}
+
+/// Keeps previously loaded data useful while making a failed refresh explicit.
+class _DashboardLoadErrorNotice extends StatelessWidget {
+  const _DashboardLoadErrorNotice({this.message});
+
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: FelloColors.danger.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: FelloColors.danger.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        message ?? 'We could not refresh the dashboard. Showing the latest available data.',
         style: Theme.of(context).textTheme.bodyMedium
             ?.copyWith(color: FelloColors.ink, fontWeight: FontWeight.w500),
       ),

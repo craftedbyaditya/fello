@@ -33,6 +33,7 @@ void main() {
 
       expect(source, contains('] else if (state.forms.isNotEmpty)'));
       expect(source, contains('child: _FormTilesSection('));
+      expect(source, contains('child: _DashboardLoadErrorNotice('));
     },
   );
 }
