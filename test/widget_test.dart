@@ -23,4 +23,16 @@ void main() {
       expect(source, contains('child: ListView('));
     },
   );
+
+  test(
+    'dashboard exposes existing forms before the first response arrives',
+    () {
+      final source = File(
+        'lib/features/dashboard/presentation/dashboard_page.dart',
+      ).readAsStringSync();
+
+      expect(source, contains('] else if (state.forms.isNotEmpty)'));
+      expect(source, contains('child: _FormTilesSection('));
+    },
+  );
 }

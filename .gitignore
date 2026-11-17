@@ -43,6 +43,7 @@ config/dart_defines.supabase.json
 .env
 .env.local
 .env.production
+.env.qa
 .env.*.local
 
 # Symbolication related

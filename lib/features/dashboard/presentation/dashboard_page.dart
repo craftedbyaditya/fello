@@ -86,11 +86,7 @@ class _DashboardPageState extends State<DashboardPage> {
     } on PlanLimitFailure catch (e) {
       if (!mounted) return;
       setState(() => _creatingForm = false);
-      showKaydoToast(
-        context,
-        message: e.message,
-        tone: KaydoToastTone.error,
-      );
+      showKaydoToast(context, message: e.message, tone: KaydoToastTone.error);
     } catch (_) {
       if (!mounted) return;
       setState(() => _creatingForm = false);
@@ -106,8 +102,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
       listenWhen: (previous, current) =>
-          previous.session?.organization.id !=
-          current.session?.organization.id,
+          previous.session?.organization.id != current.session?.organization.id,
       listener: (context, authState) {
         // Full page refresh: auth restores after the first frame, so reload then.
         if (authState.session != null) _load();
@@ -115,7 +110,8 @@ class _DashboardPageState extends State<DashboardPage> {
       child: BlocBuilder<DashboardBloc, DashboardState>(
         builder: (context, state) {
           final session = context.watch<AuthBloc>().state.session;
-          final waitingForAuthOrData = session == null ||
+          final waitingForAuthOrData =
+              session == null ||
               state.status == DashboardStatus.initial ||
               (state.status == DashboardStatus.loading &&
                   state.forms.isEmpty &&
@@ -127,9 +123,7 @@ class _DashboardPageState extends State<DashboardPage> {
           if (state.status == DashboardStatus.failure &&
               state.stats == null &&
               state.forms.isEmpty) {
-            return Center(
-              child: Text(state.errorMessage ?? 'Failed to load'),
-            );
+            return Center(child: Text(state.errorMessage ?? 'Failed to load'));
           }
 
           final stats = state.stats;
@@ -145,74 +139,94 @@ class _DashboardPageState extends State<DashboardPage> {
           final showWelcome = state.forms.isEmpty && !_exploring;
           final isAdmin = session.profile.isAdmin;
 
-        return ColoredBox(
-          color: FelloColors.paper,
-          child: RefreshIndicator(
-            onRefresh: () async => _load(),
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                if (showWelcome) ...[
-                  SoftPadding(
-                    padding: const EdgeInsets.fromLTRB(28, 28, 28, 12),
-                    child: FadeSlideIn(
-                      child: FirstTimeWelcome(
-                        creating: _creatingForm,
-                        onCreateForm: _createFirstForm,
-                        onExplore: () => setState(() => _exploring = true),
-                      ),
-                    ),
-                  ),
-                  SoftPadding(
-                    padding: const EdgeInsets.fromLTRB(28, 0, 28, 36),
-                    child: FadeSlideIn(
-                      delay: const Duration(milliseconds: 60),
-                      child: SetupChecklistCard(
-                        progress: progress,
-                        onCreateForm: _creatingForm ? null : _createFirstForm,
-                        onInviteTeam:
-                            isAdmin ? () => context.go('/team') : null,
-                        onAddLogo:
-                            isAdmin ? () => context.go('/settings/logo') : null,
-                      ),
-                    ),
-                  ),
-                ] else ...[
-                  SoftPadding(
-                    padding: const EdgeInsets.fromLTRB(28, 28, 28, 12),
-                    child: FadeSlideIn(
-                      child: _DashboardGreeting(
-                        userName: session.profile.displayName,
-                      ),
-                    ),
-                  ),
-                  if (progress.showChecklist)
+          return ColoredBox(
+            color: FelloColors.paper,
+            child: RefreshIndicator(
+              onRefresh: () async => _load(),
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  if (showWelcome) ...[
                     SoftPadding(
-                      padding: const EdgeInsets.fromLTRB(28, 0, 28, 12),
+                      padding: const EdgeInsets.fromLTRB(28, 28, 28, 12),
                       child: FadeSlideIn(
-                        delay: const Duration(milliseconds: 30),
+                        child: FirstTimeWelcome(
+                          creating: _creatingForm,
+                          onCreateForm: _createFirstForm,
+                          onExplore: () => setState(() => _exploring = true),
+                        ),
+                      ),
+                    ),
+                    SoftPadding(
+                      padding: const EdgeInsets.fromLTRB(28, 0, 28, 36),
+                      child: FadeSlideIn(
+                        delay: const Duration(milliseconds: 60),
                         child: SetupChecklistCard(
                           progress: progress,
-                          onCreateForm:
-                              _creatingForm ? null : _createFirstForm,
-                          onInviteTeam:
-                              isAdmin ? () => context.go('/team') : null,
+                          onCreateForm: _creatingForm ? null : _createFirstForm,
+                          onInviteTeam: isAdmin
+                              ? () => context.go('/team')
+                              : null,
                           onAddLogo: isAdmin
                               ? () => context.go('/settings/logo')
                               : null,
                         ),
                       ),
                     ),
-                  // No vanity empty KPIs — wait until customers have responded.
-                  if (stats != null && analytics.totalResponses > 0) ...[
+                  ] else ...[
                     SoftPadding(
-                      padding: const EdgeInsets.fromLTRB(28, 18, 28, 0),
+                      padding: const EdgeInsets.fromLTRB(28, 28, 28, 12),
                       child: FadeSlideIn(
-                        delay: const Duration(milliseconds: 80),
-                        child: _KpiRow(analytics: analytics),
+                        child: _DashboardGreeting(
+                          userName: session.profile.displayName,
+                        ),
                       ),
                     ),
-                    if (state.forms.length > 1)
+                    if (progress.showChecklist)
+                      SoftPadding(
+                        padding: const EdgeInsets.fromLTRB(28, 0, 28, 12),
+                        child: FadeSlideIn(
+                          delay: const Duration(milliseconds: 30),
+                          child: SetupChecklistCard(
+                            progress: progress,
+                            onCreateForm: _creatingForm
+                                ? null
+                                : _createFirstForm,
+                            onInviteTeam: isAdmin
+                                ? () => context.go('/team')
+                                : null,
+                            onAddLogo: isAdmin
+                                ? () => context.go('/settings/logo')
+                                : null,
+                          ),
+                        ),
+                      ),
+                    // No vanity empty KPIs — wait until customers have responded.
+                    if (stats != null && analytics.totalResponses > 0) ...[
+                      SoftPadding(
+                        padding: const EdgeInsets.fromLTRB(28, 18, 28, 0),
+                        child: FadeSlideIn(
+                          delay: const Duration(milliseconds: 80),
+                          child: _KpiRow(analytics: analytics),
+                        ),
+                      ),
+                      if (state.forms.length > 1)
+                        SoftPadding(
+                          padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
+                          child: FadeSlideIn(
+                            delay: const Duration(milliseconds: 120),
+                            child: _FormTilesSection(
+                              forms: state.forms,
+                              responses: state.responses,
+                            ),
+                          ),
+                        )
+                      else
+                        const SoftPadding(
+                          padding: EdgeInsets.only(bottom: 36),
+                          child: SizedBox.shrink(),
+                        ),
+                    ] else if (state.forms.isNotEmpty)
                       SoftPadding(
                         padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
                         child: FadeSlideIn(
@@ -228,16 +242,11 @@ class _DashboardPageState extends State<DashboardPage> {
                         padding: EdgeInsets.only(bottom: 36),
                         child: SizedBox.shrink(),
                       ),
-                  ] else
-                    const SoftPadding(
-                      padding: EdgeInsets.only(bottom: 36),
-                      child: SizedBox.shrink(),
-                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-        );
+          );
         },
       ),
     );
@@ -340,8 +349,9 @@ class _DashboardAnalytics {
       final d = DateTime(now.year, now.month - (11 - i), 1);
       return d;
     });
-    final monthLabels =
-        months.map((m) => DateFormat('MMM').format(m).toLowerCase()).toList();
+    final monthLabels = months
+        .map((m) => DateFormat('MMM').format(m).toLowerCase())
+        .toList();
 
     final npsByMonth = <double?>[];
     for (final month in months) {
@@ -373,8 +383,7 @@ class _DashboardAnalytics {
       }
     }
     final totalNps = promoters + passives + detractors;
-    final recommendPct =
-        totalNps == 0 ? 0.0 : (promoters / totalNps) * 100;
+    final recommendPct = totalNps == 0 ? 0.0 : (promoters / totalNps) * 100;
 
     final heatmap = <_HeatRow>[];
     for (final form in forms.where((f) => f.isPublished).take(5)) {
@@ -403,28 +412,23 @@ class _DashboardAnalytics {
         ? null
         : (recentNps - olderNps).round();
 
-    final recentRatings = recent
-        .map(_ratingOf)
-        .whereType<double>()
-        .toList();
-    final olderRatings = older
-        .map(_ratingOf)
-        .whereType<double>()
-        .toList();
+    final recentRatings = recent.map(_ratingOf).whereType<double>().toList();
+    final olderRatings = older.map(_ratingOf).whereType<double>().toList();
     final ratingDelta =
         (mid == 0 || recentRatings.isEmpty || olderRatings.isEmpty)
-            ? null
-            : ((recentRatings.reduce((a, b) => a + b) / recentRatings.length) -
-                    (olderRatings.reduce((a, b) => a + b) / olderRatings.length))
-                .round();
+        ? null
+        : ((recentRatings.reduce((a, b) => a + b) / recentRatings.length) -
+                  (olderRatings.reduce((a, b) => a + b) / olderRatings.length))
+              .round();
 
     final responseDelta = mid == 0 ? null : recent.length - older.length;
     int promoterCount(List<FeedbackResponse> list) => list.where((r) {
-          final n = _npsOf(r, forms);
-          return n != null && n >= 9;
-        }).length;
-    final completionDelta =
-        mid == 0 ? null : promoterCount(recent) - promoterCount(older);
+      final n = _npsOf(r, forms);
+      return n != null && n >= 9;
+    }).length;
+    final completionDelta = mid == 0
+        ? null
+        : promoterCount(recent) - promoterCount(older);
 
     return _DashboardAnalytics(
       nps: stats?.npsScore ?? (allNps.isEmpty ? null : _npsScore(allNps)),
@@ -517,8 +521,9 @@ class _FormTileStats {
     required FeedbackForm form,
     required List<FeedbackResponse> responses,
   }) {
-    final formResponses =
-        responses.where((r) => r.formId == form.id).toList(growable: false);
+    final formResponses = responses
+        .where((r) => r.formId == form.id)
+        .toList(growable: false);
     var promoters = 0;
     var detractors = 0;
     var scored = 0;
@@ -560,10 +565,7 @@ class _FormTileStats {
 }
 
 class _FormTilesSection extends StatelessWidget {
-  const _FormTilesSection({
-    required this.forms,
-    required this.responses,
-  });
+  const _FormTilesSection({required this.forms, required this.responses});
 
   final List<FeedbackForm> forms;
   final List<FeedbackResponse> responses;
@@ -580,8 +582,8 @@ class _FormTilesSection extends StatelessWidget {
         final columns = width >= 1100
             ? 3
             : width >= 720
-                ? 2
-                : 1;
+            ? 2
+            : 1;
         final gap = 14.0;
         final tileWidth = columns == 1
             ? width
@@ -757,10 +759,7 @@ class _KpiRow extends StatelessWidget {
             value: '${analytics.totalResponses}',
             delta: analytics.responseDelta,
           ),
-          _KpiCard(
-            label: 'Needs attention',
-            value: '${analytics.detractors}',
-          ),
+          _KpiCard(label: 'Needs attention', value: '${analytics.detractors}'),
         ];
 
         if (constraints.maxWidth < 900) {
@@ -793,11 +792,7 @@ class _KpiRow extends StatelessWidget {
 }
 
 class _KpiCard extends StatelessWidget {
-  const _KpiCard({
-    required this.label,
-    required this.value,
-    this.delta,
-  });
+  const _KpiCard({required this.label, required this.value, this.delta});
 
   final String label;
   final String value;
@@ -848,8 +843,10 @@ class _KpiCard extends StatelessWidget {
               if (deltaValue != null) ...[
                 const Spacer(),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: up
                         ? FelloColors.accentSoft
@@ -873,4 +870,3 @@ class _KpiCard extends StatelessWidget {
     );
   }
 }
-
