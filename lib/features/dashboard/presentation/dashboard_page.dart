@@ -229,12 +229,19 @@ class _DashboardPageState extends State<DashboardPage> {
                     ] else if (state.forms.isNotEmpty)
                       SoftPadding(
                         padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
-                        child: FadeSlideIn(
-                          delay: const Duration(milliseconds: 120),
-                          child: _FormTilesSection(
-                            forms: state.forms,
-                            responses: state.responses,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const _ZeroResponseHint(),
+                            const SizedBox(height: 16),
+                            FadeSlideIn(
+                              delay: const Duration(milliseconds: 120),
+                              child: _FormTilesSection(
+                                forms: state.forms,
+                                responses: state.responses,
+                              ),
+                            ),
+                          ],
                         ),
                       )
                     else
@@ -276,6 +283,28 @@ class _DashboardGreeting extends StatelessWidget {
     return FelloPageHeader(
       title: '$_salutation, $_firstName',
       subtitle: "Here's what your customers are saying.",
+    );
+  }
+}
+
+class _ZeroResponseHint extends StatelessWidget {
+  const _ZeroResponseHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: FelloColors.accentSoft,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: FelloColors.border),
+      ),
+      child: Text(
+        'Your surveys are ready. Share a published link to start collecting feedback.',
+        style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: FelloColors.ink, fontWeight: FontWeight.w500),
+      ),
     );
   }
 }
