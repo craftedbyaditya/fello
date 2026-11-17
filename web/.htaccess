@@ -14,6 +14,18 @@
   RewriteRule ^ index.html [L]
 </IfModule>
 
+# Flutter's entry scripts use stable filenames. They must be revalidated on
+# every visit so a new Hostinger release cannot leave clients running an old
+# Dart bundle for the server's default cache lifetime. Hashed assets retain
+# the host's normal long-lived cache behavior.
+<IfModule mod_headers.c>
+  <FilesMatch "^(index\.html|flutter_bootstrap\.js|main\.dart\.js|flutter_service_worker\.js|release\.json|version\.json)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate, max-age=0"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+</IfModule>
+
 # Optional: force HTTPS if Hostinger SSL is active.
 # <IfModule mod_rewrite.c>
 #   RewriteCond %{HTTPS} !=on
