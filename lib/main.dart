@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:go_router/go_router.dart';
 
 import 'core/config/app_config.dart';
 import 'core/di/service_locator.dart';
@@ -13,7 +14,6 @@ import 'core/theme/fello_theme.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'domain/repositories/feature_flags_repository.dart';
 import 'features/auth/bloc/auth_bloc.dart';
-import 'shared/widgets/web_desktop_only_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -83,10 +83,14 @@ class FelloApp extends StatefulWidget {
 
 class _FelloAppState extends State<FelloApp> with WidgetsBindingObserver {
   late final StreamSubscription _authSubscription;
+  late final GoRouter _router;
 
   @override
   void initState() {
     super.initState();
+    // A router must be created once for the lifetime of the app. Recreating it
+    // during a feature-flag rebuild can discard navigation state.
+    _router = createRouter(widget.authBloc, widget.featureFlags);
     WidgetsBinding.instance.addObserver(this);
     _authSubscription = widget.authBloc.stream.listen((_) {
       widget.featureFlags.refresh(force: true);
@@ -103,21 +107,19 @@ class _FelloAppState extends State<FelloApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _authSubscription.cancel();
     widget.featureFlags.dispose();
+    _router.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final router = createRouter(widget.authBloc, widget.featureFlags);
-
     return BlocProvider.value(
       value: widget.authBloc,
       child: MaterialApp.router(
         title: 'Kaydo',
         debugShowCheckedModeBanner: false,
         theme: FelloTheme.light(),
-        routerConfig: router,
-        builder: (context, child) => WebDesktopOnlyGate(child: child),
+        routerConfig: _router,
       ),
     );
   }

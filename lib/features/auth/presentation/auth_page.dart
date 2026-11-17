@@ -70,19 +70,16 @@ class _AuthPageState extends State<AuthPage> {
     if (!_formKey.currentState!.validate()) return;
     if (_signUp) {
       context.read<AuthBloc>().add(
-            AuthSignUpSubmitted(
-              email: _email.text,
-              password: _password.text,
-              displayName: _displayName.text,
-            ),
-          );
+        AuthSignUpSubmitted(
+          email: _email.text,
+          password: _password.text,
+          displayName: _displayName.text,
+        ),
+      );
     } else {
       context.read<AuthBloc>().add(
-            AuthSignInSubmitted(
-              email: _email.text,
-              password: _password.text,
-            ),
-          );
+        AuthSignInSubmitted(email: _email.text, password: _password.text),
+      );
     }
   }
 
@@ -104,34 +101,37 @@ class _AuthPageState extends State<AuthPage> {
         final loading = state.status == AuthStatus.loading;
         return Scaffold(
           backgroundColor: FelloColors.paper,
-          body: Row(
-            children: [
-              const Expanded(
-                flex: 30,
-                child: _AuthArtPanel(),
-              ),
-              Expanded(
-                flex: 70,
-                child: ColoredBox(
-                  color: FelloColors.paper,
-                  child: SafeArea(
-                    child: _AuthFormPanel(
-                      signUp: _signUp,
-                      loading: loading,
-                      formKey: _formKey,
-                      email: _email,
-                      password: _password,
-                      displayName: _displayName,
-                      errorMessage: state.errorMessage,
-                      onSubmit: _submit,
-                      privacyRecognizer: _privacyRecognizer,
-                      termsRecognizer: _termsRecognizer,
-                      toggleRecognizer: _toggleRecognizer,
-                    ),
+          body: LayoutBuilder(
+            builder: (context, constraints) {
+              final form = ColoredBox(
+                color: FelloColors.paper,
+                child: SafeArea(
+                  child: _AuthFormPanel(
+                    signUp: _signUp,
+                    loading: loading,
+                    formKey: _formKey,
+                    email: _email,
+                    password: _password,
+                    displayName: _displayName,
+                    errorMessage: state.errorMessage,
+                    onSubmit: _submit,
+                    privacyRecognizer: _privacyRecognizer,
+                    termsRecognizer: _termsRecognizer,
+                    toggleRecognizer: _toggleRecognizer,
                   ),
                 ),
-              ),
-            ],
+              );
+
+              // The artwork is decorative. Removing it on narrow screens
+              // preserves usable input widths instead of squeezing the form.
+              if (constraints.maxWidth < 900) return form;
+              return Row(
+                children: [
+                  const Expanded(flex: 30, child: _AuthArtPanel()),
+                  Expanded(flex: 70, child: form),
+                ],
+              );
+            },
           ),
         );
       },
@@ -189,6 +189,7 @@ class _AuthFormPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 420;
     final titleStyle = GoogleFonts.poppins(
       fontSize: 28,
       fontWeight: FontWeight.w600,
@@ -223,7 +224,10 @@ class _AuthFormPanel extends StatelessWidget {
         Expanded(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 28),
+              padding: EdgeInsets.symmetric(
+                horizontal: compact ? 24 : 48,
+                vertical: 28,
+              ),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
                 child: FadeSlideIn(
@@ -250,7 +254,12 @@ class _AuthFormPanel extends StatelessWidget {
                       ],
                       const SizedBox(height: 36),
                       Container(
-                        padding: const EdgeInsets.fromLTRB(28, 28, 28, 24),
+                        padding: EdgeInsets.fromLTRB(
+                          compact ? 20 : 28,
+                          28,
+                          compact ? 20 : 28,
+                          24,
+                        ),
                         decoration: BoxDecoration(
                           color: FelloColors.paper,
                           borderRadius: BorderRadius.circular(16),
@@ -272,8 +281,8 @@ class _AuthFormPanel extends StatelessWidget {
                                   textInputAction: TextInputAction.next,
                                   validator: (v) =>
                                       v == null || v.trim().isEmpty
-                                          ? 'Enter your name'
-                                          : null,
+                                      ? 'Enter your name'
+                                      : null,
                                 ),
                                 const SizedBox(height: 20),
                               ],
@@ -283,10 +292,9 @@ class _AuthFormPanel extends StatelessWidget {
                                 keyboardType: TextInputType.emailAddress,
                                 textInputAction: TextInputAction.next,
                                 autofillHints: const [AutofillHints.email],
-                                validator: (v) =>
-                                    v == null || !v.contains('@')
-                                        ? 'Enter a valid email'
-                                        : null,
+                                validator: (v) => v == null || !v.contains('@')
+                                    ? 'Enter a valid email'
+                                    : null,
                               ),
                               const SizedBox(height: 20),
                               FelloTextField(
@@ -374,8 +382,9 @@ class _AuthFormPanel extends StatelessWidget {
                                         color: FelloColors.accentDeep,
                                         fontWeight: FontWeight.w600,
                                       ),
-                                      recognizer:
-                                          loading ? null : toggleRecognizer,
+                                      recognizer: loading
+                                          ? null
+                                          : toggleRecognizer,
                                     ),
                                   ],
                                 ),
@@ -426,7 +435,12 @@ class _AuthFormPanel extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(40, 8, 40, 20),
+          padding: EdgeInsets.fromLTRB(
+            compact ? 24 : 40,
+            8,
+            compact ? 24 : 40,
+            20,
+          ),
           child: Row(
             children: [
               MouseRegion(
