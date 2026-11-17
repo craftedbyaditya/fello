@@ -35,8 +35,9 @@ Future<void> main() async {
   final authBloc = AuthBloc(getIt<AuthRepository>())
     ..add(const AuthSubscriptionRequested());
   final featureFlags = FeatureFlagsController(getIt<FeatureFlagsRepository>());
-  await featureFlags.refresh();
-
+  // Launch with conservative defaults. A feature-flag RPC must never keep the
+  // whole web app on its native splash screen when the network is slow.
+  unawaited(featureFlags.refresh());
   runApp(FelloApp(authBloc: authBloc, featureFlags: featureFlags));
 }
 

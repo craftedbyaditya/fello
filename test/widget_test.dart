@@ -11,6 +11,13 @@ void main() {
     expect(source, isNot(contains('WebDesktopOnlyGate')));
   });
 
+  test('a delayed feature-flag refresh cannot block web app startup', () {
+    final source = File('lib/main.dart').readAsStringSync();
+
+    expect(source, contains('unawaited(featureFlags.refresh())'));
+    expect(source, isNot(contains('await featureFlags.refresh()')));
+  });
+
   test(
     'workspace navigation keeps a scrollable desktop rail and mobile drawer',
     () {
