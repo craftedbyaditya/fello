@@ -232,16 +232,6 @@ abstract final class FelloTheme {
         color: FelloColors.border,
         thickness: 1,
       ),
-      snackBarTheme: SnackBarThemeData(
-        behavior: SnackBarBehavior.floating,
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        contentTextStyle: poppins.bodyMedium?.copyWith(
-          fontSize: 13,
-          color: Colors.white,
-        ),
-        shape: FelloMetrics.dialogShape,
-      ),
     );
   }
 }

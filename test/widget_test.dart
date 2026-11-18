@@ -38,7 +38,7 @@ void main() {
         'lib/features/dashboard/presentation/dashboard_page.dart',
       ).readAsStringSync();
 
-      expect(source, contains('] else if (state.forms.isNotEmpty)'));
+      expect(source, contains('] else if (activeForms.isNotEmpty)'));
       expect(source, contains('child: _FormTilesSection('));
       expect(source, contains('child: _DashboardLoadErrorNotice('));
     },

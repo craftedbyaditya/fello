@@ -34,7 +34,7 @@ void main() {
 
     expect(
       tester.getSize(find.byType(TextFormField)).height,
-      FelloMetrics.controlHeight,
+      FelloMetrics.textFieldHeight,
     );
     expect(
       tester
@@ -68,7 +68,7 @@ void main() {
     expect(find.text('Required'), findsOneWidget);
     expect(
       tester.getSize(find.byType(TextFormField)).height,
-      FelloMetrics.controlHeight,
+      FelloMetrics.textFieldHeight,
     );
   });
 }

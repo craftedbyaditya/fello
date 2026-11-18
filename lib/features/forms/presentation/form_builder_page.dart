@@ -32,16 +32,22 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
   final _title = TextEditingController();
   final _description = TextEditingController();
   bool _hydrated = false;
+  bool _hydrating = false;
+  bool _isDirty = false;
   bool _savingDraft = false;
 
   @override
   void initState() {
     super.initState();
+    _title.addListener(_markDirty);
+    _description.addListener(_markDirty);
     context.read<FormsBloc>().add(FormSelected(widget.formId));
   }
 
   @override
   void dispose() {
+    _title.removeListener(_markDirty);
+    _description.removeListener(_markDirty);
     _title.dispose();
     _description.dispose();
     super.dispose();
@@ -49,9 +55,16 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
 
   void _hydrate(FeedbackForm form) {
     if (_hydrated && _title.text == form.title) return;
+    _hydrating = true;
     _title.text = form.title;
     _description.text = form.description;
+    _hydrating = false;
     _hydrated = true;
+    _isDirty = false;
+  }
+
+  void _markDirty() {
+    if (!_hydrating && mounted && !_isDirty) setState(() => _isDirty = true);
   }
 
   FeedbackForm _editedFrom(FeedbackForm form) {
@@ -74,45 +87,47 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
   Future<void> _addQuestion(FeedbackForm form) async {
     final result = await showAddQuestionDialog(context);
     if (result == null || !mounted) return;
+    setState(() => _isDirty = true);
     context.read<FormsBloc>().add(
-          QuestionUpsertRequested(
-            Question(
-              id: const Uuid().v4(),
-              formId: form.id,
-              type: result.type,
-              label: result.label,
-              required: result.required,
-              options: result.options,
-              sortOrder: form.questions.length,
-            ),
-          ),
-        );
+      QuestionUpsertRequested(
+        Question(
+          id: const Uuid().v4(),
+          formId: form.id,
+          type: result.type,
+          label: result.label,
+          required: result.required,
+          options: result.options,
+          sortOrder: form.questions.length,
+        ),
+      ),
+    );
   }
 
   Future<void> _editQuestion(Question question) async {
     final result = await showAddQuestionDialog(context, initial: question);
     if (result == null || !mounted) return;
+    setState(() => _isDirty = true);
     context.read<FormsBloc>().add(
-          QuestionUpsertRequested(
-            question.copyWith(
-              type: result.type,
-              label: result.label,
-              required: result.required,
-              options: result.options,
-            ),
-          ),
-        );
+      QuestionUpsertRequested(
+        question.copyWith(
+          type: result.type,
+          label: result.label,
+          required: result.required,
+          options: result.options,
+        ),
+      ),
+    );
   }
 
   String _typeLabel(QuestionType t) => switch (t) {
-        QuestionType.starRating => 'Star rating (1–5)',
-        QuestionType.nps => 'NPS (0–10)',
-        QuestionType.shortText => 'Short text',
-        QuestionType.longText => 'Long text',
-        QuestionType.yesNo => 'Yes / No',
-        QuestionType.singleChoice => 'Single choice',
-        QuestionType.multiChoice => 'Multi choice',
-      };
+    QuestionType.starRating => 'Star rating (1–5)',
+    QuestionType.nps => 'NPS (0–10)',
+    QuestionType.shortText => 'Short text',
+    QuestionType.longText => 'Long text',
+    QuestionType.yesNo => 'Yes / No',
+    QuestionType.singleChoice => 'Single choice',
+    QuestionType.multiChoice => 'Multi choice',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -206,6 +221,18 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              if (form.isPublished)
+                                IconButton(
+                                  tooltip: 'Share survey',
+                                  onPressed: () => showPublishSuccessDialog(
+                                    context: context,
+                                    formTitle: form.title,
+                                    link:
+                                        '${getIt<AppConfig>().publicBaseUrl}/f/${form.slug}',
+                                    isNewlyPublished: false,
+                                  ),
+                                  icon: const Icon(Icons.share_outlined),
+                                ),
                             ],
                           ),
                           const SizedBox(height: 18),
@@ -257,9 +284,11 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
                                   )
                                 : Column(
                                     children: [
-                                      for (var i = 0;
-                                          i < form.questions.length;
-                                          i++) ...[
+                                      for (
+                                        var i = 0;
+                                        i < form.questions.length;
+                                        i++
+                                      ) ...[
                                         if (i > 0) const SizedBox(height: 8),
                                         _QuestionTile(
                                           question: form.questions[i],
@@ -267,12 +296,10 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
                                             form.questions[i].type,
                                           ),
                                           canDelete: isAdmin,
-                                          onEdit: () => _editQuestion(
-                                            form.questions[i],
-                                          ),
-                                          onDelete: () => context
-                                              .read<FormsBloc>()
-                                              .add(
+                                          onEdit: () =>
+                                              _editQuestion(form.questions[i]),
+                                          onDelete: () =>
+                                              context.read<FormsBloc>().add(
                                                 QuestionDeleteRequested(
                                                   form.questions[i].id,
                                                 ),
@@ -290,7 +317,8 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
               ),
               _BottomActions(
                 busy: busy,
-                canPublish: form.questions.isNotEmpty,
+                hasChanges: _isDirty,
+                canPublish: _isDirty && form.questions.isNotEmpty,
                 onSaveDraft: () => _saveDraft(form),
                 onPublish: () => _publish(form),
               ),
@@ -303,11 +331,7 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
 }
 
 class _SectionBox extends StatelessWidget {
-  const _SectionBox({
-    required this.title,
-    required this.child,
-    this.trailing,
-  });
+  const _SectionBox({required this.title, required this.child, this.trailing});
 
   final String title;
   final Widget child;
@@ -387,6 +411,25 @@ class _QuestionTile extends StatelessWidget {
                     height: 1.25,
                   ),
                 ),
+                if (question.type == QuestionType.multiChoice &&
+                    question.options.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final option in question.options) ...[
+                          _Tag(
+                            label: option,
+                            background: const Color(0xFFF3F4F6),
+                            foreground: FelloColors.inkSoft,
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,
@@ -476,12 +519,14 @@ class _Tag extends StatelessWidget {
 class _BottomActions extends StatelessWidget {
   const _BottomActions({
     required this.busy,
+    required this.hasChanges,
     required this.canPublish,
     required this.onSaveDraft,
     required this.onPublish,
   });
 
   final bool busy;
+  final bool hasChanges;
   final bool canPublish;
   final VoidCallback onSaveDraft;
   final VoidCallback onPublish;
@@ -507,7 +552,7 @@ class _BottomActions extends StatelessWidget {
               SizedBox(
                 height: FelloMetrics.controlHeight,
                 child: OutlinedButton(
-                  onPressed: busy ? null : onSaveDraft,
+                  onPressed: busy || !hasChanges ? null : onSaveDraft,
                   child: busy
                       ? const SizedBox(
                           width: 18,

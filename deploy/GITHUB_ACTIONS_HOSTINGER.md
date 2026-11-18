@@ -35,6 +35,42 @@ credentials. They do not belong in a browser deployment workflow.
 
 ## Release and rollback
 
+## Automatic versioning and deployment
+
+After this workflow is enabled, merging a PR to `main` is the release action:
+
+1. GitHub Actions runs Flutter tests and analysis.
+2. `scripts/bump_version.dart` increments `pubspec.yaml` and creates a
+   `chore(release): vX.Y.Z+N` commit on `main`.
+3. The same workflow builds that release commit and deploys it to Hostinger.
+
+Use Conventional Commit-style PR titles when squash merging:
+
+- `fix: …` (or any unrecognised title) → patch release
+- `feat: …` → minor release
+- `feat!: …` or a title/body containing `BREAKING CHANGE` → major release
+
+No AI model is required. A Mac can calculate a version locally with:
+
+```bash
+dart run scripts/bump_version.dart --level patch
+```
+
+That command edits `pubspec.yaml`; use it only when intentionally preparing a
+manual release. Normal releases are performed by the GitHub workflow after a
+PR merge.
+
+### One-time GitHub setup
+
+The `github-actions[bot]` must be able to create the release commit on `main`.
+In the repository's **Actions → General** settings, select **Read and write
+permissions** for workflows. If branch protection prevents this push, allow
+only GitHub Actions (or a dedicated GitHub App bot) to bypass the required
+status-check restriction. Do not weaken required reviews for human users.
+
+The `production` environment remains the deployment gate. Its required
+reviewers, SSH secrets, and path restrictions are unchanged.
+
 Each deployment resolves the real SSH path for `/public_html/kaydo`, stages the
 artifact in `$HOME/.kaydo-staging/<commit>`, and archives the live root in
 `$HOME/.kaydo-backups/<commit>/site.tar.gz` before copying files into the fixed

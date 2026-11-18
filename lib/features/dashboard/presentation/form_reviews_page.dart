@@ -8,6 +8,7 @@ import '../../../core/theme/fello_colors.dart';
 import '../../../domain/entities/feedback_form.dart';
 import '../../../shared/animations/fade_slide_in.dart';
 import '../../../shared/widgets/fello_back_button.dart';
+import '../../../shared/widgets/kaydo_toast.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../../complaints/presentation/survey_follow_ups_section.dart';
 import '../bloc/dashboard_bloc.dart';
@@ -35,7 +36,8 @@ class _FormReviewsPageState extends State<FormReviewsPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final bloc = context.read<DashboardBloc>();
-      final orgId = bloc.state.orgId ??
+      final orgId =
+          bloc.state.orgId ??
           context.read<AuthBloc>().state.session?.organization.id;
       if (orgId != null &&
           (bloc.state.forms.isEmpty || bloc.state.responses.isEmpty)) {
@@ -74,8 +76,10 @@ class _FormReviewsPageState extends State<FormReviewsPage> {
         }
 
         final summary = ReviewSummary.from(form, state.responses);
-        final recentReviews =
-            sortReviews(summary.reviews, ReviewSort.recent).take(3).toList();
+        final recentReviews = sortReviews(
+          summary.reviews,
+          ReviewSort.recent,
+        ).take(3).toList();
         final title = form.title;
         final createdAt = form.createdAt;
         final formId = form.id;
@@ -171,7 +175,9 @@ class SoftPadding extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SliverToBoxAdapter(child: Padding(padding: padding, child: child));
+    return SliverToBoxAdapter(
+      child: Padding(padding: padding, child: child),
+    );
   }
 }
 
@@ -235,8 +241,10 @@ class _Header extends StatelessWidget {
           icon: Icons.filter_list_rounded,
           label: 'Filter',
           onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Filters coming soon')),
+            showKaydoToast(
+              context,
+              message: 'Filters are coming soon.',
+              tone: KaydoToastTone.info,
             );
           },
         ),
@@ -333,10 +341,7 @@ class _SummaryRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${summary.fiveStarPct.round()}%',
-                  style: _valueStyle,
-                ),
+                Text('${summary.fiveStarPct.round()}%', style: _valueStyle),
                 const SizedBox(height: 8),
                 Text('5-Star reviews', style: _labelStyle),
                 const SizedBox(height: 12),
@@ -696,12 +701,13 @@ class _ReviewsColumn extends StatelessWidget {
             ReviewCard(
               review: reviews[i],
               onVisibilityChanged: () {
-                final orgId = context.read<DashboardBloc>().state.orgId ??
+                final orgId =
+                    context.read<DashboardBloc>().state.orgId ??
                     context.read<AuthBloc>().state.session?.organization.id;
                 if (orgId != null) {
-                  context
-                      .read<DashboardBloc>()
-                      .add(DashboardLoadRequested(orgId));
+                  context.read<DashboardBloc>().add(
+                    DashboardLoadRequested(orgId),
+                  );
                 }
               },
             ),
@@ -710,4 +716,3 @@ class _ReviewsColumn extends StatelessWidget {
     );
   }
 }
-

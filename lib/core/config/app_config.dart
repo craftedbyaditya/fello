@@ -13,8 +13,12 @@ class AppConfig {
     this.turnstileSiteKey = '',
   });
 
-  /// Display version (matches `pubspec.yaml` version name).
-  static const String appVersion = '1.0.1';
+  /// Release version injected by the production build from `pubspec.yaml`.
+  /// Local development retains a readable fallback without needing defines.
+  static const String appVersion = String.fromEnvironment(
+    'APP_VERSION',
+    defaultValue: '1.0.1',
+  );
 
   final DataSource dataSource;
   final String supabaseUrl;

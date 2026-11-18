@@ -8,6 +8,7 @@ import '../../../core/theme/fello_typography.dart';
 import '../../../shared/animations/fade_slide_in.dart';
 import '../../../shared/widgets/fello_back_button.dart';
 import '../../../shared/widgets/fello_text_field.dart';
+import '../../../shared/widgets/kaydo_toast.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../bloc/forms_bloc.dart';
 
@@ -38,12 +39,12 @@ class _FormCreatePageState extends State<FormCreatePage> {
     if (orgId == null) return;
     setState(() => _submitted = true);
     context.read<FormsBloc>().add(
-          FormCreateRequested(
-            orgId: orgId,
-            title: _title.text.trim(),
-            description: _description.text.trim(),
-          ),
-        );
+      FormCreateRequested(
+        orgId: orgId,
+        title: _title.text.trim(),
+        description: _description.text.trim(),
+      ),
+    );
   }
 
   @override
@@ -60,8 +61,10 @@ class _FormCreatePageState extends State<FormCreatePage> {
       listener: (context, state) {
         if (state.errorMessage != null) {
           setState(() => _submitted = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(state.errorMessage!)),
+          showKaydoToast(
+            context,
+            message: state.errorMessage!,
+            tone: KaydoToastTone.error,
           );
           return;
         }
@@ -90,8 +93,9 @@ class _FormCreatePageState extends State<FormCreatePage> {
                             alignment: Alignment.centerLeft,
                             child: FelloBackButton(
                               tooltip: 'Back to forms',
-                              onPressed:
-                                  busy ? null : () => context.go('/forms'),
+                              onPressed: busy
+                                  ? null
+                                  : () => context.go('/forms'),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -116,8 +120,8 @@ class _FormCreatePageState extends State<FormCreatePage> {
                                   textInputAction: TextInputAction.next,
                                   validator: (v) =>
                                       v == null || v.trim().isEmpty
-                                          ? 'Enter a title'
-                                          : null,
+                                      ? 'Enter a title'
+                                      : null,
                                 ),
                                 const SizedBox(height: 16),
                                 FelloTextField(
@@ -144,11 +148,10 @@ class _FormCreatePageState extends State<FormCreatePage> {
                     padding: EdgeInsets.fromLTRB(pad, 12, pad, 12),
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        final buttonWidth = (constraints.maxWidth * 0.22)
-                            .clamp(
-                              FelloMetrics.buttonMinWidth,
-                              200.0,
-                            );
+                        final buttonWidth = (constraints.maxWidth * 0.22).clamp(
+                          FelloMetrics.buttonMinWidth,
+                          200.0,
+                        );
                         return Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [

@@ -267,6 +267,44 @@ class _WorkspaceLogoPageState extends State<WorkspaceLogoPage> {
 
   Widget _buildEmbeddedEditor(ThemeData theme) {
     final hasLogo = _existingUrl != null && _existingUrl!.trim().isNotEmpty;
+    if (hasLogo) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: FelloColors.mist,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: FelloColors.border),
+              ),
+              child: _buildPreview(),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                tooltip: 'Edit logo',
+                onPressed: _saving ? null : _pickAndSave,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+              ),
+              IconButton(
+                tooltip: 'Remove logo',
+                onPressed: _saving ? null : _removeLogo,
+                icon: const Icon(
+                  Icons.delete_outline,
+                  size: 18,
+                  color: FelloColors.danger,
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -317,47 +355,6 @@ class _WorkspaceLogoPageState extends State<WorkspaceLogoPage> {
             ),
           ),
         ),
-        if (hasLogo) ...[
-          const SizedBox(height: 8),
-          Container(
-            height: 42,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: FelloColors.border),
-            ),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: SizedBox(
-                    width: 30,
-                    height: 30,
-                    child: _buildPreview(),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Workspace logo',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Remove logo',
-                  onPressed: _saving ? null : _removeLogo,
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    size: 18,
-                    color: FelloColors.inkSoft,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ],
     );
   }

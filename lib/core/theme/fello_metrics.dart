@@ -5,6 +5,10 @@ abstract final class FelloMetrics {
   /// Single-line control height (buttons, search, text fields).
   static const double controlHeight = 40;
 
+  /// Standard one-line text input height. Text fields are deliberately taller
+  /// than compact action buttons; multi-line fields opt in explicitly.
+  static const double textFieldHeight = 48;
+
   static const double controlRadius = 10;
 
   /// Shared corner radius for dialogs / popups (less rounded than cards).
@@ -23,10 +27,10 @@ abstract final class FelloMetrics {
     horizontal: 16,
   );
 
-  /// Padding inside single-line inputs — keeps ~40px total with border.
+  /// Padding inside the standard one-line input.
   static const EdgeInsets fieldContentPadding = EdgeInsets.symmetric(
     horizontal: 14,
-    vertical: 10,
+    vertical: 13,
   );
 
   static const EdgeInsets fieldContentPaddingMultiline = EdgeInsets.symmetric(
@@ -34,17 +38,17 @@ abstract final class FelloMetrics {
     vertical: 12,
   );
 
-  /// Prefix/suffix icons must not inflate field height past [controlHeight].
+  /// Prefix/suffix icons must not inflate the standard text field.
   static const BoxConstraints iconBoxConstraints = BoxConstraints(
     minWidth: 40,
-    minHeight: 40,
+    minHeight: textFieldHeight,
     maxWidth: 44,
-    maxHeight: 40,
+    maxHeight: textFieldHeight,
   );
 
   static const BoxConstraints fieldBoxConstraints = BoxConstraints(
-    minHeight: controlHeight,
-    maxHeight: controlHeight,
+    minHeight: textFieldHeight,
+    maxHeight: textFieldHeight,
   );
 
   static BorderRadius get controlBorderRadius =>

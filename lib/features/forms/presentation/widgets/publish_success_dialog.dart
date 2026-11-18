@@ -11,6 +11,7 @@ Future<void> showPublishSuccessDialog({
   required BuildContext context,
   required String formTitle,
   required String link,
+  bool isNewlyPublished = true,
 }) {
   return showDialog<void>(
     context: context,
@@ -18,6 +19,7 @@ Future<void> showPublishSuccessDialog({
     builder: (context) => _PublishSuccessDialog(
       formTitle: formTitle,
       link: link,
+      isNewlyPublished: isNewlyPublished,
     ),
   );
 }
@@ -26,10 +28,12 @@ class _PublishSuccessDialog extends StatefulWidget {
   const _PublishSuccessDialog({
     required this.formTitle,
     required this.link,
+    required this.isNewlyPublished,
   });
 
   final String formTitle;
   final String link;
+  final bool isNewlyPublished;
 
   @override
   State<_PublishSuccessDialog> createState() => _PublishSuccessDialogState();
@@ -88,7 +92,7 @@ class _PublishSuccessDialogState extends State<_PublishSuccessDialog>
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  'Form successfully created',
+                  widget.isNewlyPublished ? 'Survey published' : 'Share survey',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.headlineMedium?.copyWith(fontSize: 22),
                 ),

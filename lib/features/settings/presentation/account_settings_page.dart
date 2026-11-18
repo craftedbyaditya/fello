@@ -68,12 +68,9 @@ class AccountSettingsPage extends StatelessWidget {
         const SizedBox(height: 16),
         SizedBox(
           height: 150,
-          child: _SettingsCard(
+          child: const _TeamComingSoonCard(
             icon: Icons.group_outlined,
             title: 'Manage team',
-            description: 'Invite teammates and manage the existing team list.',
-            actionLabel: 'Manage members',
-            onTap: () => context.go('/team'),
           ),
         ),
       ],
@@ -81,20 +78,11 @@ class AccountSettingsPage extends StatelessWidget {
   }
 }
 
-class _SettingsCard extends StatelessWidget {
-  const _SettingsCard({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.actionLabel,
-    required this.onTap,
-  });
+class _TeamComingSoonCard extends StatelessWidget {
+  const _TeamComingSoonCard({required this.icon, required this.title});
 
   final IconData icon;
   final String title;
-  final String description;
-  final String actionLabel;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -102,53 +90,46 @@ class _SettingsCard extends StatelessWidget {
     return Material(
       color: FelloColors.paper,
       borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Ink(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: FelloColors.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: FelloColors.accent, size: 24),
-              const SizedBox(height: 6),
-              Text(
-                title,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+      child: Ink(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: FelloColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: FelloColors.accent, size: 24),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
               ),
-              const SizedBox(height: 6),
-              Text(
-                description,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: FelloColors.inkSoft,
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
                 ),
-              ),
-              const SizedBox(height: 6),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton(
-                  onPressed: onTap,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: FelloColors.accentDeep,
-                    side: const BorderSide(color: FelloColors.accent),
-                    minimumSize: const Size(0, 32),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                decoration: BoxDecoration(
+                  color: FelloColors.mist,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Coming soon',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: FelloColors.inkSoft,
+                    fontWeight: FontWeight.w600,
                   ),
-                  child: Text(actionLabel),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

@@ -126,17 +126,22 @@ class _DashboardPageState extends State<DashboardPage> {
             return Center(child: Text(state.errorMessage ?? 'Failed to load'));
           }
 
+          // Deleted and unpublished surveys are operational history, not live
+          // dashboard content. Only active published surveys belong here.
+          final activeForms = state.forms
+              .where((form) => form.isPublished && !form.isDeleted)
+              .toList(growable: false);
           final stats = state.stats;
           final analytics = _DashboardAnalytics.from(
             responses: state.responses,
-            forms: state.forms,
+            forms: activeForms,
             stats: stats,
           );
           final progress = SetupProgress.fromForms(
-            state.forms,
+            activeForms,
             hasLogo: session.organization.hasLogo,
           );
-          final showWelcome = state.forms.isEmpty && !_exploring;
+          final showWelcome = activeForms.isEmpty && !_exploring;
           final isAdmin = session.profile.isAdmin;
 
           return ColoredBox(
@@ -217,13 +222,13 @@ class _DashboardPageState extends State<DashboardPage> {
                           child: _KpiRow(analytics: analytics),
                         ),
                       ),
-                      if (state.forms.length > 1)
+                      if (activeForms.length > 1)
                         SoftPadding(
                           padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
                           child: FadeSlideIn(
                             delay: const Duration(milliseconds: 120),
                             child: _FormTilesSection(
-                              forms: state.forms,
+                              forms: activeForms,
                               responses: state.responses,
                             ),
                           ),
@@ -233,7 +238,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           padding: EdgeInsets.only(bottom: 36),
                           child: SizedBox.shrink(),
                         ),
-                    ] else if (state.forms.isNotEmpty)
+                    ] else if (activeForms.isNotEmpty)
                       SoftPadding(
                         padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
                         child: Column(
@@ -244,7 +249,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             FadeSlideIn(
                               delay: const Duration(milliseconds: 120),
                               child: _FormTilesSection(
-                                forms: state.forms,
+                                forms: activeForms,
                                 responses: state.responses,
                               ),
                             ),

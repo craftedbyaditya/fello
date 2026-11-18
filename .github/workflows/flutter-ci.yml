@@ -1,4 +1,4 @@
-name: Flutter CI
+name: Kaydo CI and release
 
 on:
   pull_request:
@@ -6,6 +6,8 @@ on:
   push:
     branches: [main]
 
+# Pull-request jobs retain read-only access. Only the trusted post-merge job
+# receives permission to create the version commit on main.
 permissions:
   contents: read
 
@@ -26,9 +28,47 @@ jobs:
       - run: flutter test
       - run: flutter analyze
 
-  build-and-deploy:
+  release-version:
+    # A normal PR merge into main gets a release commit. The release commit is
+    # built and deployed below in this same run. The workflow's GITHUB_TOKEN
+    # push does not create a second push workflow, so it cannot loop.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: verify
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    outputs:
+      release_sha: ${{ steps.version.outputs.release_sha }}
+      release_version: ${{ steps.version.outputs.release_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+      - id: version
+        name: Bump release version
+        env:
+          MERGE_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [[ "$MERGE_MESSAGE" == chore\(release\):* ]]; then
+            version="$(awk '/^version:/ {print $2}' pubspec.yaml)"
+          else
+            version="$(dart run scripts/bump_version.dart --level auto --message "$MERGE_MESSAGE")"
+            git add pubspec.yaml
+            git commit -m "chore(release): v${version}"
+            git push origin HEAD:main
+          fi
+          echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "release_version=$version" >> "$GITHUB_OUTPUT"
+
+  build-and-deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [verify, release-version]
     runs-on: ubuntu-22.04
     environment: production
     concurrency:
@@ -36,6 +76,8 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-version.outputs.release_sha }}
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.9'
@@ -60,12 +102,12 @@ jobs:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
           TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
-          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_SHA: ${{ needs.release-version.outputs.release_sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
         run: ./scripts/build_release_web.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: kaydo-web-${{ github.sha }}
+          name: kaydo-web-${{ needs.release-version.outputs.release_sha }}
           path: build/web
           if-no-files-found: error
           retention-days: 30
@@ -77,5 +119,5 @@ jobs:
           HOSTINGER_SSH_KNOWN_HOSTS: ${{ secrets.HOSTINGER_SSH_KNOWN_HOSTS }}
           HOSTINGER_DOCUMENT_ROOT: ${{ vars.HOSTINGER_DOCUMENT_ROOT }}
           HOSTINGER_SSH_PORT: ${{ vars.HOSTINGER_SSH_PORT }}
-          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_SHA: ${{ needs.release-version.outputs.release_sha }}
         run: ./scripts/deploy_hostinger_ssh.sh

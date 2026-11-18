@@ -16,6 +16,8 @@ PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-https://kaydo.sayge.in}"
 DATA_SOURCE="${DATA_SOURCE:-supabase}"
 SUPABASE_URL="${SUPABASE_URL:-}"
 SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY:-}"
+APP_VERSION="${APP_VERSION:-$(awk '/^version:/ {print $2}' pubspec.yaml)}"
+APP_VERSION="${APP_VERSION%%+*}"
 
 # Normalize common .env mistakes (spaces, doubled scheme).
 SUPABASE_URL="$(echo "$SUPABASE_URL" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s#^https:https://#https://#; s#^http:http://#http://#')"
@@ -49,6 +51,7 @@ echo "Building Kaydo web → $PUBLIC_BASE_URL (DATA_SOURCE=$DATA_SOURCE)"
   --dart-define=PUBLIC_BASE_URL="$PUBLIC_BASE_URL" \
   --dart-define=SUPABASE_URL="$SUPABASE_URL" \
   --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+  --dart-define=APP_VERSION="$APP_VERSION" \
   --dart-define=TURNSTILE_SITE_KEY="${TURNSTILE_SITE_KEY:-}"
 
 # Ensure CNAME is present for GitHub Pages / some CDNs.
