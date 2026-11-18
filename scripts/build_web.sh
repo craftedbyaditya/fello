@@ -44,7 +44,7 @@ fi
 
 echo "Building Kaydo web → $PUBLIC_BASE_URL (DATA_SOURCE=$DATA_SOURCE)"
 "${FLUTTER[@]}" pub get
-"${FLUTTER[@]}" build web --release --base-href=/ \
+"${FLUTTER[@]}" build web --release --base-href=/ --pwa-strategy=none \
   --dart-define=DATA_SOURCE="$DATA_SOURCE" \
   --dart-define=PUBLIC_BASE_URL="$PUBLIC_BASE_URL" \
   --dart-define=SUPABASE_URL="$SUPABASE_URL" \
@@ -53,6 +53,48 @@ echo "Building Kaydo web → $PUBLIC_BASE_URL (DATA_SOURCE=$DATA_SOURCE)"
 
 # Ensure CNAME is present for GitHub Pages / some CDNs.
 echo 'kaydo.sayge.in' > build/web/CNAME
+
+# Flutter's entry files have stable names. Version their URLs per release so
+# Hostinger's CDN cannot serve an older application bundle after a deploy.
+release_token="${GITHUB_SHA:-local}"
+release_token="${release_token:0:12}"
+python3 - "$release_token" <<'PY'
+from pathlib import Path
+import sys
+
+token = sys.argv[1]
+bootstrap = Path('build/web/flutter_bootstrap.js')
+text = bootstrap.read_text()
+needle = 'mainJsPath":"main.dart.js"'
+if needle not in text:
+    raise SystemExit('Unable to version Flutter main entrypoint')
+bootstrap.write_text(text.replace(needle, f'mainJsPath":"main.dart.js?v={token}"', 1))
+
+index = Path('build/web/index.html')
+text = index.read_text()
+needle = '<script src="flutter_bootstrap.js" async></script>'
+if needle not in text:
+    raise SystemExit('Unable to version Flutter bootstrap entrypoint')
+replacement = '''<script>
+    // Kaydo does not offer offline mode. Retire workers left by older Flutter
+    // builds before loading this release's cache-busted bootstrap.
+    const loadKaydo = () => {
+      const script = document.createElement('script');
+      script.src = 'flutter_bootstrap.js?v=%s';
+      script.async = true;
+      document.body.appendChild(script);
+    };
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations()
+        .then((registrations) => Promise.all(registrations.map((r) => r.unregister())))
+        .catch(() => {})
+        .finally(loadKaydo);
+    } else {
+      loadKaydo();
+    }
+  </script>''' % token
+index.write_text(text.replace(needle, replacement, 1))
+PY
 
 echo ""
 echo "Build ready: $ROOT/build/web"

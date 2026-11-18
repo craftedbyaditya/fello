@@ -28,3 +28,9 @@ ssh "${ssh_opts[@]}" "$HOSTINGER_SSH_USER@$HOSTINGER_SSH_HOST" "test -f '$stagin
 # Hostinger serves the fixed document root, so this is deliberately not atomic:
 # archive the current root, then overwrite managed files in place. No deletion.
 ssh "${ssh_opts[@]}" "$HOSTINGER_SSH_USER@$HOSTINGER_SSH_HOST" "tar -czf '$backup/site.tar.gz' -C '$live_root' . && tar -C '$staging' -cf - . | tar -xf - -C '$live_root'"
+
+# A file-overlay deployment is the only compatible mode for this fixed hPanel
+# document root. Verify the live entrypoints byte-for-byte against the build
+# manifest before reporting success. The script has already archived the prior
+# Kaydo root, so a failed validation leaves a recoverable backup and fails CI.
+ssh "${ssh_opts[@]}" "$HOSTINGER_SSH_USER@$HOSTINGER_SSH_HOST" "cd '$live_root' && test -f release.sha256 && sha256sum -c release.sha256"
