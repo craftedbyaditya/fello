@@ -29,7 +29,10 @@ class SupabaseResponseRepository implements ResponseRepository {
       query = query.eq('form_id', filters.formId!);
     }
     if (filters.from != null) {
-      query = query.gte('submitted_at', filters.from!.toUtc().toIso8601String());
+      query = query.gte(
+        'submitted_at',
+        filters.from!.toUtc().toIso8601String(),
+      );
     }
     if (filters.to != null) {
       final end = DateTime(
@@ -149,9 +152,7 @@ class SupabaseResponseRepository implements ResponseRepository {
       );
     }
     if (lower.contains('duplicate')) {
-      return const SubmitGuardFailure(
-        'This response was already submitted.',
-      );
+      return const SubmitGuardFailure('This response was already submitted.');
     }
     if (lower.contains('invalid_answers') || lower.contains('please answer')) {
       return SubmitGuardFailure(
@@ -222,7 +223,8 @@ class SupabaseResponseRepository implements ResponseRepository {
     QuestionType type,
   ) {
     for (final a in r.answers) {
-      if (questions[a.questionId] == type && a.value is num) {
+      if ((a.questionType == type.name || questions[a.questionId] == type) &&
+          a.value is num) {
         return (a.value as num).toInt();
       }
     }
@@ -293,17 +295,19 @@ class SupabaseResponseRepository implements ResponseRepository {
   }
 
   FeedbackResponse _mapResponse(Map<String, dynamic> row) {
-    final answers = (row['answers'] as List? ?? [])
-        .map((a) {
-          final m = a as Map<String, dynamic>;
-          return Answer(
-            id: m['id'] as String,
-            responseId: m['response_id'] as String,
-            questionId: m['question_id'] as String,
-            value: m['value'],
-          );
-        })
-        .toList();
+    final answers = (row['answers'] as List? ?? []).map((a) {
+      final m = a as Map<String, dynamic>;
+      return Answer(
+        id: m['id'] as String,
+        responseId: m['response_id'] as String,
+        questionId:
+            m['question_id'] as String? ??
+            ((m['question_snapshot'] as Map?)?['id'] as String? ?? ''),
+        value: m['value'],
+        questionLabel: (m['question_snapshot'] as Map?)?['label'] as String?,
+        questionType: (m['question_snapshot'] as Map?)?['type'] as String?,
+      );
+    }).toList();
     return FeedbackResponse(
       id: row['id'] as String,
       formId: row['form_id'] as String,

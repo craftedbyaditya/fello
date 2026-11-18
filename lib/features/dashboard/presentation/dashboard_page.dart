@@ -213,8 +213,22 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                         ),
                       ),
+                    // Aggregate metrics only make sense while there is one
+                    // active survey. With multiple surveys, present the
+                    // per-survey cards instead of blending unrelated data.
+                    if (activeForms.length > 1)
+                      SoftPadding(
+                        padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
+                        child: FadeSlideIn(
+                          delay: const Duration(milliseconds: 120),
+                          child: _FormTilesSection(
+                            forms: activeForms,
+                            responses: state.responses,
+                          ),
+                        ),
+                      )
                     // No vanity empty KPIs — wait until customers have responded.
-                    if (stats != null && analytics.totalResponses > 0) ...[
+                    else if (stats != null && analytics.totalResponses > 0) ...[
                       SoftPadding(
                         padding: const EdgeInsets.fromLTRB(28, 18, 28, 0),
                         child: FadeSlideIn(
@@ -222,22 +236,10 @@ class _DashboardPageState extends State<DashboardPage> {
                           child: _KpiRow(analytics: analytics),
                         ),
                       ),
-                      if (activeForms.length > 1)
-                        SoftPadding(
-                          padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
-                          child: FadeSlideIn(
-                            delay: const Duration(milliseconds: 120),
-                            child: _FormTilesSection(
-                              forms: activeForms,
-                              responses: state.responses,
-                            ),
-                          ),
-                        )
-                      else
-                        const SoftPadding(
-                          padding: EdgeInsets.only(bottom: 36),
-                          child: SizedBox.shrink(),
-                        ),
+                      const SoftPadding(
+                        padding: EdgeInsets.only(bottom: 36),
+                        child: SizedBox.shrink(),
+                      ),
                     ] else if (activeForms.isNotEmpty)
                       SoftPadding(
                         padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
@@ -518,6 +520,9 @@ class _DashboardAnalytics {
 
   static int? _npsOf(FeedbackResponse r, List<FeedbackForm> forms) {
     for (final a in r.answers) {
+      if (a.questionType == QuestionType.nps.name && a.value is num) {
+        return (a.value as num).toInt();
+      }
       for (final f in forms) {
         for (final q in f.questions) {
           if (q.id == a.questionId &&
@@ -597,23 +602,28 @@ class _FormTileStats {
 
     for (final response in formResponses) {
       for (final answer in response.answers) {
-        for (final question in form.questions) {
-          if (question.id != answer.questionId || answer.value is! num) {
-            continue;
+        final snapshottedType = QuestionType.values.where(
+          (type) => type.name == answer.questionType,
+        );
+        final questionType = snapshottedType.isNotEmpty
+            ? snapshottedType.first
+            : form.questions
+                  .where((question) => question.id == answer.questionId)
+                  .map((question) => question.type)
+                  .firstOrNull;
+        if (questionType == null || answer.value is! num) continue;
+        final value = (answer.value as num).toDouble();
+        if (questionType == QuestionType.nps) {
+          scored++;
+          final nps = value.round();
+          if (nps >= 9) {
+            promoters++;
+          } else if (nps <= 6) {
+            detractors++;
           }
-          final value = (answer.value as num).toDouble();
-          if (question.type == QuestionType.nps) {
-            scored++;
-            final nps = value.round();
-            if (nps >= 9) {
-              promoters++;
-            } else if (nps <= 6) {
-              detractors++;
-            }
-            ratings.add(value);
-          } else if (question.type == QuestionType.starRating) {
-            ratings.add(value);
-          }
+          ratings.add(value);
+        } else if (questionType == QuestionType.starRating) {
+          ratings.add(value);
         }
       }
     }

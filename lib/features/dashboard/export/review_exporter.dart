@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show NetworkAssetBundle, rootBundle;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -16,6 +16,8 @@ class ReviewExportData {
     required this.avgRating,
     required this.totalReviews,
     required this.reviews,
+    this.organizationName,
+    this.organizationLogoUrl,
   });
 
   final String surveyTitle;
@@ -23,6 +25,8 @@ class ReviewExportData {
   final double avgRating;
   final int totalReviews;
   final List<ReviewItem> reviews;
+  final String? organizationName;
+  final String? organizationLogoUrl;
 }
 
 /// Builds Kaydo-branded PDF + Excel exports for survey reviews.
@@ -32,6 +36,7 @@ abstract final class ReviewExporter {
   static const _muted = PdfColor.fromInt(0xFF5B6573);
   static const _border = PdfColor.fromInt(0xFFEEF2EF);
   static const _soft = PdfColor.fromInt(0xFFE7F7EE);
+  static const _paper = PdfColor.fromInt(0xFFFAFCFB);
 
   static String _slug(String title) {
     final cleaned = title
@@ -49,9 +54,7 @@ abstract final class ReviewExporter {
 
   static List<String> _questionLabels(ReviewExportData data) {
     if (data.reviews.isEmpty) return const [];
-    return [
-      for (final answer in data.reviews.first.answers) answer.label,
-    ];
+    return [for (final answer in data.reviews.first.answers) answer.label];
   }
 
   static Future<void> exportPdf(ReviewExportData data) async {
@@ -75,222 +78,177 @@ abstract final class ReviewExporter {
 
   static Future<Uint8List> buildPdf(ReviewExportData data) async {
     final doc = pw.Document(
-      title: '${data.surveyTitle} — Kaydo reviews',
+      title: '${data.surveyTitle} - Kaydo reviews',
       author: 'Kaydo',
       creator: 'Kaydo by Sayge',
     );
 
     pw.MemoryImage? logo;
     try {
-      final logoData =
-          await rootBundle.load('assets/images/kaydo_logo.png');
+      final logoData = await rootBundle.load('assets/images/kaydo_logo.png');
       logo = pw.MemoryImage(logoData.buffer.asUint8List());
     } catch (_) {
       logo = null;
     }
+    pw.ImageProvider? organizationLogo;
+    final organizationLogoUrl = data.organizationLogoUrl?.trim();
+    if (organizationLogoUrl != null && organizationLogoUrl.isNotEmpty) {
+      try {
+        // An absolute key is resolved unchanged. Supplying a real base URI is
+        // important on Flutter Web: a bundle rooted at the image URL can turn
+        // an empty key into an invalid request instead of fetching the logo.
+        final logoData = await NetworkAssetBundle(
+          Uri.parse('https://kaydo.sayge.in/'),
+        ).load(organizationLogoUrl);
+        organizationLogo = pw.MemoryImage(logoData.buffer.asUint8List());
+      } catch (_) {
+        // A report remains exportable if the workspace logo is unavailable.
+      }
+    }
 
     final dateFmt = DateFormat('MMM d, y');
-    final exportedAt = DateFormat('MMMM d, y · HH:mm').format(DateTime.now());
-    final questions = _questionLabels(data);
-
+    final exportedAt = DateFormat('MMMM d, y - HH:mm').format(DateTime.now());
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.fromLTRB(36, 36, 36, 40),
+        margin: const pw.EdgeInsets.fromLTRB(42, 42, 42, 46),
         header: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
-            pw.Container(
-              padding: const pw.EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 12,
-              ),
-              decoration: pw.BoxDecoration(
-                color: _brandGreen,
-                borderRadius: pw.BorderRadius.circular(8),
-              ),
-              child: pw.Row(
-                children: [
-                  if (logo != null) ...[
-                    pw.Container(
-                      width: 28,
-                      height: 28,
-                      decoration: pw.BoxDecoration(
-                        color: PdfColors.white,
-                        borderRadius: pw.BorderRadius.circular(6),
-                      ),
-                      padding: const pw.EdgeInsets.all(3),
-                      child: pw.Image(logo, fit: pw.BoxFit.contain),
-                    ),
-                    pw.SizedBox(width: 10),
-                  ],
-                  pw.Expanded(
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text(
-                          'Kaydo',
-                          style: pw.TextStyle(
-                            color: PdfColors.white,
-                            fontSize: 14,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                        pw.Text(
-                          'Feedback export',
-                          style: const pw.TextStyle(
-                            color: PdfColors.white,
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
-                    ),
+            pw.Row(
+              children: [
+                if (organizationLogo != null)
+                  pw.SizedBox(
+                    width: 48,
+                    height: 32,
+                    child: pw.Image(organizationLogo, fit: pw.BoxFit.contain),
                   ),
+                if (organizationLogo != null) pw.SizedBox(width: 10),
+                if (data.organizationName?.trim().isNotEmpty == true)
                   pw.Text(
-                    'kaydo.sayge.in',
-                    style: const pw.TextStyle(
-                      color: PdfColors.white,
-                      fontSize: 9,
+                    data.organizationName!.trim(),
+                    style: pw.TextStyle(
+                      color: _ink,
+                      fontSize: 13,
+                      fontWeight: pw.FontWeight.bold,
                     ),
                   ),
-                ],
+              ],
+            ),
+            pw.SizedBox(height: 16),
+            pw.Text(
+              'FEEDBACK REPORT',
+              style: pw.TextStyle(
+                color: _brandGreen,
+                fontSize: 9,
+                fontWeight: pw.FontWeight.bold,
+                letterSpacing: 1.1,
               ),
             ),
-            pw.SizedBox(height: 14),
+            pw.SizedBox(height: 8),
+            pw.Container(height: 2, color: _brandGreen),
+            pw.SizedBox(height: 16),
             pw.Text(
               data.surveyTitle.isEmpty ? 'Untitled survey' : data.surveyTitle,
               style: pw.TextStyle(
                 color: _ink,
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: pw.FontWeight.bold,
               ),
             ),
-            pw.SizedBox(height: 4),
+            pw.SizedBox(height: 5),
             pw.Text(
-              'Created ${dateFmt.format(data.createdAt)}  ·  Exported $exportedAt',
-              style: const pw.TextStyle(color: _muted, fontSize: 9),
-            ),
-            pw.SizedBox(height: 12),
-            pw.Row(
-              children: [
-                _statChip('Reviews', '${data.totalReviews}'),
-                pw.SizedBox(width: 8),
-                _statChip('Avg rating', data.avgRating.toStringAsFixed(1)),
-              ],
+              'Created ${dateFmt.format(data.createdAt)} - Exported $exportedAt',
+              style: const pw.TextStyle(color: _muted, fontSize: 8.5),
             ),
             pw.SizedBox(height: 14),
-            pw.Divider(color: _border, thickness: 1),
+            pw.Row(
+              children: [
+                pw.Expanded(
+                  child: _summaryMetric('Responses', '${data.totalReviews}'),
+                ),
+                pw.SizedBox(width: 10),
+                pw.Expanded(
+                  child: _summaryMetric(
+                    'Average rating',
+                    data.avgRating > 0
+                        ? '${data.avgRating.toStringAsFixed(1)} / 5'
+                        : '-',
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 18),
+            pw.Text(
+              'Responses',
+              style: pw.TextStyle(
+                color: _ink,
+                fontSize: 12,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
             pw.SizedBox(height: 8),
           ],
         ),
         footer: (context) => pw.Container(
-          alignment: pw.Alignment.centerRight,
-          margin: const pw.EdgeInsets.only(top: 8),
-          child: pw.Text(
-            'Page ${context.pageNumber} of ${context.pagesCount}  ·  Powered by Kaydo',
-            style: const pw.TextStyle(color: _muted, fontSize: 8),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(top: pw.BorderSide(color: _border)),
+          ),
+          padding: const pw.EdgeInsets.only(top: 8),
+          child: pw.Row(
+            children: [
+              pw.UrlLink(
+                destination: 'https://kaydo.sayge.in',
+                child: pw.Row(
+                  children: [
+                    pw.Text(
+                      'Powered by',
+                      style: const pw.TextStyle(color: _muted, fontSize: 8),
+                    ),
+                    pw.SizedBox(width: 5),
+                    if (logo != null)
+                      pw.SizedBox(
+                        width: 42,
+                        height: 14,
+                        child: pw.Image(logo, fit: pw.BoxFit.contain),
+                      ),
+                  ],
+                ),
+              ),
+              pw.Spacer(),
+              pw.Text(
+                'Page ${context.pageNumber} of ${context.pagesCount}',
+                style: const pw.TextStyle(color: _muted, fontSize: 8),
+              ),
+            ],
           ),
         ),
         build: (context) {
           if (data.reviews.isEmpty) {
             return [
-              pw.Text(
-                'No reviews to export yet.',
-                style: const pw.TextStyle(color: _muted, fontSize: 11),
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(18),
+                decoration: pw.BoxDecoration(
+                  color: _paper,
+                  border: pw.Border.all(color: _border),
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Text(
+                  'No responses have been collected for this survey yet.',
+                  style: const pw.TextStyle(color: _muted, fontSize: 10),
+                ),
               ),
             ];
           }
 
           return [
-            for (final review in data.reviews) ...[
-              pw.Container(
-                margin: const pw.EdgeInsets.only(bottom: 10),
-                padding: const pw.EdgeInsets.all(12),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: _border),
-                  borderRadius: pw.BorderRadius.circular(8),
-                ),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Row(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Expanded(
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text(
-                                review.displayName,
-                                style: pw.TextStyle(
-                                  color: _ink,
-                                  fontSize: 12,
-                                  fontWeight: pw.FontWeight.bold,
-                                ),
-                              ),
-                              pw.SizedBox(height: 2),
-                              pw.Text(
-                                '${dateFmt.format(review.submittedAt)}  ·  ${review.location}',
-                                style: const pw.TextStyle(
-                                  color: _muted,
-                                  fontSize: 9,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        pw.Container(
-                          padding: const pw.EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: pw.BoxDecoration(
-                            color: _soft,
-                            borderRadius: pw.BorderRadius.circular(999),
-                          ),
-                          child: pw.Text(
-                            '${review.stars}/5',
-                            style: pw.TextStyle(
-                              color: _brandGreen,
-                              fontSize: 10,
-                              fontWeight: pw.FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (questions.isNotEmpty) ...[
-                      pw.SizedBox(height: 8),
-                      for (final answer in review.answers)
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.only(bottom: 4),
-                          child: pw.RichText(
-                            text: pw.TextSpan(
-                              children: [
-                                pw.TextSpan(
-                                  text: '${answer.label}: ',
-                                  style: pw.TextStyle(
-                                    color: _muted,
-                                    fontSize: 9,
-                                    fontWeight: pw.FontWeight.bold,
-                                  ),
-                                ),
-                                pw.TextSpan(
-                                  text: answer.displayText,
-                                  style: const pw.TextStyle(
-                                    color: _ink,
-                                    fontSize: 9,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
-                  ],
-                ),
+            for (var index = 0; index < data.reviews.length; index++)
+              _responseCard(
+                review: data.reviews[index],
+                responseNumber: index + 1,
+                dateFmt: dateFmt,
               ),
-            ],
           ];
         },
       ),
@@ -299,29 +257,155 @@ abstract final class ReviewExporter {
     return doc.save();
   }
 
-  static pw.Widget _statChip(String label, String value) {
+  static pw.Widget _summaryMetric(String label, String value) {
     return pw.Container(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: pw.BoxDecoration(
-        color: _soft,
-        borderRadius: pw.BorderRadius.circular(8),
+        color: _paper,
+        border: pw.Border.all(color: _border),
+        borderRadius: pw.BorderRadius.circular(6),
       ),
-      child: pw.Row(
-        mainAxisSize: pw.MainAxisSize.min,
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(
-            label,
-            style: const pw.TextStyle(color: _muted, fontSize: 9),
-          ),
-          pw.SizedBox(width: 6),
+          pw.Text(label, style: const pw.TextStyle(color: _muted, fontSize: 8)),
+          pw.SizedBox(height: 4),
           pw.Text(
             value,
             style: pw.TextStyle(
-              color: _brandGreen,
-              fontSize: 11,
+              color: _ink,
+              fontSize: 13,
               fontWeight: pw.FontWeight.bold,
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _responseCard({
+    required ReviewItem review,
+    required int responseNumber,
+    required DateFormat dateFmt,
+  }) {
+    final respondent = review.displayName.trim().isEmpty
+        ? 'Anonymous respondent'
+        : review.displayName;
+    final metadata = <String>[dateFmt.format(review.submittedAt)];
+    if (review.location.trim().isNotEmpty) metadata.add(review.location);
+
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(bottom: 10),
+      padding: const pw.EdgeInsets.all(13),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: _border),
+        borderRadius: pw.BorderRadius.circular(6),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Container(
+                width: 22,
+                height: 22,
+                alignment: pw.Alignment.center,
+                decoration: pw.BoxDecoration(
+                  color: _soft,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Text(
+                  '$responseNumber',
+                  style: pw.TextStyle(
+                    color: _brandGreen,
+                    fontSize: 9,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              pw.SizedBox(width: 8),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      respondent,
+                      style: pw.TextStyle(
+                        color: _ink,
+                        fontSize: 11,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      metadata.join(' - '),
+                      style: const pw.TextStyle(color: _muted, fontSize: 8),
+                    ),
+                  ],
+                ),
+              ),
+              if (review.stars > 0)
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 4,
+                  ),
+                  decoration: pw.BoxDecoration(
+                    color: _soft,
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.Text(
+                    '${review.stars} / 5',
+                    style: pw.TextStyle(
+                      color: _brandGreen,
+                      fontSize: 9,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (review.answers.isNotEmpty) ...[
+            pw.SizedBox(height: 10),
+            pw.Divider(color: _border, thickness: 0.7),
+            pw.SizedBox(height: 8),
+            for (final answer in review.answers)
+              pw.Container(
+                width: double.infinity,
+                margin: const pw.EdgeInsets.only(bottom: 6),
+                padding: const pw.EdgeInsets.symmetric(
+                  horizontal: 9,
+                  vertical: 7,
+                ),
+                decoration: pw.BoxDecoration(
+                  color: _paper,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      answer.label,
+                      style: pw.TextStyle(
+                        color: _muted,
+                        fontSize: 8.5,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.SizedBox(height: 3),
+                    pw.Text(
+                      answer.displayText,
+                      style: pw.TextStyle(
+                        color: _ink,
+                        fontSize: 10,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ],
       ),
     );
@@ -332,7 +416,9 @@ abstract final class ReviewExporter {
     final sheet = excel['Reviews'];
     excel.delete('Sheet1');
 
-    final title = data.surveyTitle.isEmpty ? 'Untitled survey' : data.surveyTitle;
+    final title = data.surveyTitle.isEmpty
+        ? 'Untitled survey'
+        : data.surveyTitle;
     final exportedAt = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
     final questions = _questionLabels(data);
 
@@ -372,8 +458,12 @@ abstract final class ReviewExporter {
 
     setCell(0, 2, 'Total reviews', style: metaStyle);
     setCell(1, 2, '${data.totalReviews}', style: metaStyle);
-    setCell(2, 2, 'Avg rating ${data.avgRating.toStringAsFixed(1)}',
-        style: metaStyle);
+    setCell(
+      2,
+      2,
+      'Avg rating ${data.avgRating.toStringAsFixed(1)}',
+      style: metaStyle,
+    );
 
     final headers = <String>[
       'Respondent',

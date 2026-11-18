@@ -71,6 +71,36 @@ void main() {
       FelloMetrics.textFieldHeight,
     );
   });
+
+  testWidgets('email and password fields retain identical input heights', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      host(
+        const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FelloTextField(label: 'Work email'),
+            SizedBox(height: 16),
+            FelloTextField(
+              label: 'Password',
+              obscureText: true,
+              showObscureToggle: true,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final fields = find.byType(TextFormField);
+    expect(fields, findsNWidgets(2));
+    for (var index = 0; index < 2; index++) {
+      expect(
+        tester.getSize(fields.at(index)).height,
+        FelloMetrics.textFieldHeight,
+      );
+    }
+  });
 }
 
 String? _required(String? value) =>

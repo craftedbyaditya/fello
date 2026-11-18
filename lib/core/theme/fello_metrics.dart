@@ -46,6 +46,15 @@ abstract final class FelloMetrics {
     maxHeight: textFieldHeight,
   );
 
+  /// A zero-width suffix can enforce a one-line field's vertical geometry
+  /// without giving plain inputs the horizontal space of an icon button.
+  static const BoxConstraints fieldHeightSuffixConstraints = BoxConstraints(
+    minWidth: 0,
+    minHeight: textFieldHeight,
+    maxWidth: double.infinity,
+    maxHeight: textFieldHeight,
+  );
+
   static const BoxConstraints fieldBoxConstraints = BoxConstraints(
     minHeight: textFieldHeight,
     maxHeight: textFieldHeight,

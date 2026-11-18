@@ -91,11 +91,10 @@ class ReviewItem {
   final bool isPublic;
 
   bool get hasTextAnswer => answers.any(
-        (a) =>
-            (a.type == QuestionType.shortText ||
-                a.type == QuestionType.longText) &&
-            a.hasValue,
-      );
+    (a) =>
+        (a.type == QuestionType.shortText || a.type == QuestionType.longText) &&
+        a.hasValue,
+  );
 
   String get previewText {
     for (final answer in answers) {
@@ -117,10 +116,10 @@ class ReviewItem {
   }
 
   String get searchableText => [
-        displayName,
-        location,
-        for (final answer in answers) ...[answer.label, answer.displayText],
-      ].join(' ').toLowerCase();
+    displayName,
+    location,
+    for (final answer in answers) ...[answer.label, answer.displayText],
+  ].join(' ').toLowerCase();
 }
 
 class ReviewSummary {
@@ -150,8 +149,9 @@ class ReviewSummary {
     FeedbackForm form,
     List<FeedbackResponse> responses,
   ) {
-    final formResponses =
-        responses.where((r) => r.formId == form.id).toList(growable: false);
+    final formResponses = responses
+        .where((r) => r.formId == form.id)
+        .toList(growable: false);
     final starCounts = {for (var i = 1; i <= 5; i++) i: 0};
     final ratings = <double>[];
     final thisMonthRatings = <double>[];
@@ -159,27 +159,28 @@ class ReviewSummary {
     final now = DateTime.now();
     final reviews = <ReviewItem>[];
 
-    final questions = [...form.questions]
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    final questionAverages = <String, List<double>>{
-      for (final q in questions)
-        if (q.type == QuestionType.starRating) q.label: <double>[],
-    };
+    final currentQuestions = {for (final q in form.questions) q.id: q};
+    final questionAverages = <String, List<double>>{};
 
     for (var index = 0; index < formResponses.length; index++) {
       final response = formResponses[index];
-      final byQuestion = {
-        for (final answer in response.answers)
-          answer.questionId: _unwrapAnswerValue(answer.value),
-      };
-
       final mappedAnswers = <ReviewAnswer>[
-        for (final question in questions)
+        for (final answer in response.answers)
           ReviewAnswer(
-            questionId: question.id,
-            label: question.label,
-            type: question.type,
-            value: byQuestion[question.id],
+            questionId: answer.questionId,
+            // A response carries its original definition. Current questions
+            // are used only as a compatibility fallback for pre-version data.
+            label:
+                answer.questionLabel ??
+                currentQuestions[answer.questionId]?.label ??
+                'Question',
+            type: QuestionType.values.firstWhere(
+              (type) => type.name == answer.questionType,
+              orElse: () =>
+                  currentQuestions[answer.questionId]?.type ??
+                  QuestionType.shortText,
+            ),
+            value: _unwrapAnswerValue(answer.value),
           ),
       ];
 
@@ -189,9 +190,9 @@ class ReviewSummary {
           continue;
         }
         final score = (answer.value as num).round().clamp(1, 5);
-        questionAverages.putIfAbsent(answer.label, () => <double>[]).add(
-              score.toDouble(),
-            );
+        questionAverages
+            .putIfAbsent(answer.label, () => <double>[])
+            .add(score.toDouble());
         if (stars == 0) stars = score;
       }
       if (stars == 0) {
@@ -222,10 +223,12 @@ class ReviewSummary {
         }
       }
 
-      final metaName = response.metadata['displayName'] ??
+      final metaName =
+          response.metadata['displayName'] ??
           response.metadata['name'] ??
           response.metadata['respondent_name'];
-      final metaLocation = response.metadata['location'] ??
+      final metaLocation =
+          response.metadata['location'] ??
           response.metadata['city'] ??
           response.metadata['source'];
 
@@ -235,7 +238,7 @@ class ReviewSummary {
           formId: form.id,
           displayName: metaName is String && metaName.trim().isNotEmpty
               ? metaName.trim()
-              : 'Respondent ${index + 1}',
+              : responseDisplayId(response.id),
           submittedAt: submitted,
           location: metaLocation is String && metaLocation.trim().isNotEmpty
               ? metaLocation.trim()
@@ -251,19 +254,21 @@ class ReviewSummary {
         values.isEmpty ? 0 : values.reduce((a, b) => a + b) / values.length;
 
     final avgRating = avg(ratings);
-    final thisMonthAvg =
-        thisMonthRatings.isEmpty ? avgRating : avg(thisMonthRatings);
-    final lastMonthAvg =
-        lastMonthRatings.isEmpty ? avgRating : avg(lastMonthRatings);
+    final thisMonthAvg = thisMonthRatings.isEmpty
+        ? avgRating
+        : avg(thisMonthRatings);
+    final lastMonthAvg = lastMonthRatings.isEmpty
+        ? avgRating
+        : avg(lastMonthRatings);
     final fiveStarPct = ratings.isEmpty
         ? 0.0
         : ((starCounts[5] ?? 0) / ratings.length) * 100;
     final volumeDeltaPct = lastMonthRatings.isEmpty
         ? (thisMonthRatings.isEmpty ? 0 : 100)
         : (((thisMonthRatings.length - lastMonthRatings.length) /
-                    lastMonthRatings.length) *
-                100)
-            .round();
+                      lastMonthRatings.length) *
+                  100)
+              .round();
 
     return ReviewSummary(
       avgRating: avgRating,
@@ -295,6 +300,19 @@ class ReviewSummary {
     return raw;
   }
 }
+
+/// Keeps anonymous feedback identifiable without assigning a misleading
+/// sequential respondent name or exposing a full database identifier.
+String responseDisplayId(String responseId) {
+  final compact = responseId.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+  final shortId = compact.isEmpty
+      ? 'UNKNOWN'
+      : compact.substring(0, compact.length.clamp(0, 8)).toUpperCase();
+  return shortId;
+}
+
+String readableResponseTimestamp(DateTime submittedAt) =>
+    DateFormat('MMM d, y, h:mm a').format(submittedAt);
 
 List<ReviewItem> sortReviews(List<ReviewItem> all, ReviewSort sort) {
   final items = [...all];
@@ -330,8 +348,8 @@ class ReviewStarRow extends StatelessWidget {
             rating >= i
                 ? Icons.star_rounded
                 : rating >= i - 0.5
-                    ? Icons.star_half_rounded
-                    : Icons.star_border_rounded,
+                ? Icons.star_half_rounded
+                : Icons.star_border_rounded,
             size: size,
             color: reviewStarYellow,
           ),
@@ -365,10 +383,7 @@ Future<void> showReviewDetailDialog(
 }
 
 class _ReviewDetailDialog extends StatefulWidget {
-  const _ReviewDetailDialog({
-    required this.review,
-    this.onVisibilityChanged,
-  });
+  const _ReviewDetailDialog({required this.review, this.onVisibilityChanged});
 
   final ReviewItem review;
   final VoidCallback? onVisibilityChanged;
@@ -413,7 +428,7 @@ class _ReviewDetailDialogState extends State<_ReviewDetailDialog> {
   @override
   Widget build(BuildContext context) {
     final review = widget.review;
-    final date = DateFormat('MMMM d, y').format(review.submittedAt);
+    final timestamp = readableResponseTimestamp(review.submittedAt);
     final initials = reviewInitials(review.displayName);
     final isAdmin =
         context.watch<AuthBloc>().state.session?.profile.isAdmin ?? false;
@@ -460,7 +475,7 @@ class _ReviewDetailDialogState extends State<_ReviewDetailDialog> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '$date · ${review.location}',
+                          '$timestamp · ${review.location}',
                           style: GoogleFonts.poppins(
                             fontSize: 12.5,
                             color: FelloColors.inkSoft,
@@ -481,33 +496,48 @@ class _ReviewDetailDialogState extends State<_ReviewDetailDialog> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(22, 12, 22, 0),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     border: Border.all(color: FelloColors.border),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      _isPublic ? 'Public' : 'Private',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _isPublic ? 'Public' : 'Private',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                            Text(
+                              _isPublic
+                                  ? 'Included in Reviews API responses'
+                                  : 'Hidden from Reviews API',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: FelloColors.inkSoft,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    subtitle: Text(
-                      _isPublic
-                          ? 'Included in Reviews API responses'
-                          : 'Hidden from Reviews API',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: FelloColors.inkSoft,
+                      Transform.scale(
+                        scale: 0.78,
+                        child: Switch.adaptive(
+                          value: _isPublic,
+                          activeThumbColor: FelloColors.accent,
+                          onChanged: _saving ? null : _togglePublic,
+                        ),
                       ),
-                    ),
-                    value: _isPublic,
-                    activeThumbColor: FelloColors.accent,
-                    onChanged: _saving ? null : _togglePublic,
+                    ],
                   ),
                 ),
               ),
@@ -538,10 +568,7 @@ class _ReviewDetailDialogState extends State<_ReviewDetailDialog> {
 }
 
 class _AiInsightLoader extends StatelessWidget {
-  const _AiInsightLoader({
-    required this.responseId,
-    required this.formId,
-  });
+  const _AiInsightLoader({required this.responseId, required this.formId});
 
   final String responseId;
   final String formId;
@@ -598,27 +625,26 @@ class _ReviewAnswerBlock extends StatelessWidget {
         const SizedBox(height: 6),
         switch (answer.type) {
           QuestionType.starRating when answer.value is num => ReviewStarRow(
-              rating: (answer.value as num).toDouble().clamp(1, 5),
-              size: 18,
-            ),
+            rating: (answer.value as num).toDouble().clamp(1, 5),
+            size: 18,
+          ),
           QuestionType.nps when answer.value is num => Text(
-              '${(answer.value as num).round()} / 10',
-              style: GoogleFonts.poppins(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: FelloColors.ink,
-              ),
+            '${(answer.value as num).round()} / 10',
+            style: GoogleFonts.poppins(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: FelloColors.ink,
             ),
+          ),
           _ => Text(
-              answer.displayText,
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                height: 1.5,
-                color: answer.hasValue ? FelloColors.ink : FelloColors.inkSoft,
-                fontStyle:
-                    answer.hasValue ? FontStyle.normal : FontStyle.italic,
-              ),
+            answer.displayText,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              height: 1.5,
+              color: answer.hasValue ? FelloColors.ink : FelloColors.inkSoft,
+              fontStyle: answer.hasValue ? FontStyle.normal : FontStyle.italic,
             ),
+          ),
         },
       ],
     );
@@ -630,16 +656,26 @@ class ReviewCard extends StatelessWidget {
     super.key,
     required this.review,
     this.onVisibilityChanged,
+    this.selected = false,
+    this.onSelectionChanged,
   });
 
   final ReviewItem review;
   final VoidCallback? onVisibilityChanged;
+  final bool selected;
+  final ValueChanged<bool>? onSelectionChanged;
 
   @override
   Widget build(BuildContext context) {
-    final date = DateFormat('MMM d, y').format(review.submittedAt);
+    final timestamp = readableResponseTimestamp(review.submittedAt);
     final initials = reviewInitials(review.displayName);
     final preview = review.previewText;
+    final details = <ReviewAnswer>[];
+    for (final answer in review.answers) {
+      if (!answer.hasValue) continue;
+      details.add(answer);
+      if (details.length == 2) break;
+    }
 
     return Material(
       color: FelloColors.paper,
@@ -659,6 +695,13 @@ class ReviewCard extends StatelessWidget {
           ),
           child: Row(
             children: [
+              if (onSelectionChanged != null) ...[
+                Checkbox(
+                  value: selected,
+                  onChanged: (value) => onSelectionChanged!(value ?? false),
+                ),
+                const SizedBox(width: 4),
+              ],
               CircleAvatar(
                 radius: 18,
                 backgroundColor: FelloColors.accentSoft,
@@ -713,7 +756,7 @@ class ReviewCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '$date · $preview',
+                      '$timestamp · $preview',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.poppins(
@@ -721,6 +764,20 @@ class ReviewCard extends StatelessWidget {
                         color: FelloColors.inkSoft,
                       ),
                     ),
+                    if (details.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      for (final answer in details)
+                        Text(
+                          '${answer.label}: ${answer.displayText}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                            color: FelloColors.inkSoft,
+                          ),
+                        ),
+                    ],
                   ],
                 ),
               ),

@@ -3,17 +3,21 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../core/di/service_locator.dart';
 import '../../../core/theme/fello_colors.dart';
 import '../../../domain/entities/feedback_form.dart';
+import '../../../domain/entities/question.dart';
+import '../../../domain/repositories/response_repository.dart';
 import '../../../shared/animations/fade_slide_in.dart';
 import '../../../shared/widgets/fello_back_button.dart';
 import '../../../shared/widgets/kaydo_search_field.dart';
+import '../../../shared/widgets/kaydo_toast.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../bloc/dashboard_bloc.dart';
+import '../export/review_exporter.dart';
 import 'form_reviews_page.dart' show SoftPadding;
+import 'widgets/export_reviews_sheet.dart';
 import 'widgets/review_feed.dart';
-
-enum _RatingFilter { all, five, fourPlus, threePlus }
 
 class AllReviewsPage extends StatefulWidget {
   const AllReviewsPage({super.key, required this.formId});
@@ -26,9 +30,10 @@ class AllReviewsPage extends StatefulWidget {
 
 class _AllReviewsPageState extends State<AllReviewsPage> {
   final _searchController = TextEditingController();
-  ReviewSort _sort = ReviewSort.recent;
-  _RatingFilter _ratingFilter = _RatingFilter.all;
-  bool _withCommentsOnly = false;
+  String? _questionId;
+  String? _answerValue;
+  final Set<String> _selectedIds = <String>{};
+  bool _hidingSelected = false;
   String _query = '';
 
   @override
@@ -36,7 +41,8 @@ class _AllReviewsPageState extends State<AllReviewsPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final bloc = context.read<DashboardBloc>();
-      final orgId = bloc.state.orgId ??
+      final orgId =
+          bloc.state.orgId ??
           context.read<AuthBloc>().state.session?.organization.id;
       if (orgId != null &&
           (bloc.state.forms.isEmpty || bloc.state.responses.isEmpty)) {
@@ -52,21 +58,19 @@ class _AllReviewsPageState extends State<AllReviewsPage> {
   }
 
   List<ReviewItem> _applyFilters(List<ReviewItem> all) {
-    var items = sortReviews(all, _sort);
+    var items = sortReviews(all, ReviewSort.recent);
 
-    switch (_ratingFilter) {
-      case _RatingFilter.all:
-        break;
-      case _RatingFilter.five:
-        items = items.where((r) => r.stars == 5).toList();
-      case _RatingFilter.fourPlus:
-        items = items.where((r) => r.stars >= 4).toList();
-      case _RatingFilter.threePlus:
-        items = items.where((r) => r.stars >= 3).toList();
-    }
-
-    if (_withCommentsOnly) {
-      items = items.where((r) => r.hasTextAnswer).toList();
+    if (_questionId != null && _answerValue != null) {
+      items = items.where((review) {
+        final answer = review.answers.where((a) => a.questionId == _questionId);
+        if (answer.isEmpty) return false;
+        final value = answer.first;
+        if (_answerValue == _hasAnswer) return value.hasValue;
+        if (value.value is List) {
+          return (value.value as List).contains(_answerValue);
+        }
+        return value.displayText == _answerValue;
+      }).toList();
     }
 
     final q = _query.trim().toLowerCase();
@@ -75,6 +79,37 @@ class _AllReviewsPageState extends State<AllReviewsPage> {
     }
 
     return items;
+  }
+
+  static const _hasAnswer = '__has_answer__';
+
+  Future<void> _hideSelected(String orgId) async {
+    final ids = _selectedIds.toList(growable: false);
+    if (ids.isEmpty || _hidingSelected) return;
+    setState(() => _hidingSelected = true);
+    try {
+      for (final id in ids) {
+        await getIt<ResponseRepository>().setResponsePublic(
+          responseId: id,
+          isPublic: false,
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _selectedIds.clear();
+        _hidingSelected = false;
+      });
+      context.read<DashboardBloc>().add(DashboardLoadRequested(orgId));
+      showKaydoToast(context, message: 'Selected reviews are now private.');
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _hidingSelected = false);
+      showKaydoToast(
+        context,
+        message: 'We could not update every selected review.',
+        tone: KaydoToastTone.error,
+      );
+    }
   }
 
   @override
@@ -115,10 +150,16 @@ class _AllReviewsPageState extends State<AllReviewsPage> {
           );
         }
 
-        final summary = ReviewSummary.from(form, state.responses);
+        final currentForm = form;
+        final summary = ReviewSummary.from(currentForm, state.responses);
         final reviews = _applyFilters(summary.reviews);
-        final title = form.title;
-        final formId = form.id;
+        final title = currentForm.title;
+        final formId = currentForm.id;
+        final isAdmin =
+            context.watch<AuthBloc>().state.session?.profile.isAdmin ?? false;
+        final orgId =
+            state.orgId ??
+            context.read<AuthBloc>().state.session?.organization.id;
 
         return ColoredBox(
           color: FelloColors.paper,
@@ -148,26 +189,63 @@ class _AllReviewsPageState extends State<AllReviewsPage> {
                 ),
                 SoftPadding(
                   padding: const EdgeInsets.fromLTRB(28, 14, 28, 0),
-                  child: _FilterBar(
-                    ratingFilter: _ratingFilter,
-                    withCommentsOnly: _withCommentsOnly,
-                    sort: _sort,
-                    onRatingChanged: (value) =>
-                        setState(() => _ratingFilter = value),
-                    onCommentsToggled: () => setState(
-                      () => _withCommentsOnly = !_withCommentsOnly,
-                    ),
-                    onSortChanged: (value) => setState(() => _sort = value),
+                  child: _QuestionFilterBar(
+                    questions: currentForm.questions,
+                    selectedQuestionId: _questionId,
+                    selectedAnswerValue: _answerValue,
+                    onQuestionChanged: (id) => setState(() {
+                      _questionId = id;
+                      _answerValue = null;
+                    }),
+                    onAnswerChanged: (value) =>
+                        setState(() => _answerValue = value),
                   ),
                 ),
                 SoftPadding(
                   padding: const EdgeInsets.fromLTRB(28, 8, 28, 0),
-                  child: Text(
-                    '${reviews.length} review${reviews.length == 1 ? '' : 's'}',
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: FelloColors.inkSoft,
-                      fontWeight: FontWeight.w500,
+                  child: _ReviewBulkToolbar(
+                    total: reviews.length,
+                    selectedCount: _selectedIds.length,
+                    allSelected:
+                        reviews.isNotEmpty &&
+                        reviews.every(
+                          (review) => _selectedIds.contains(review.id),
+                        ),
+                    showBulkActions: isAdmin,
+                    hiding: _hidingSelected,
+                    onSelectAll: isAdmin
+                        ? (selected) => setState(() {
+                            if (selected) {
+                              _selectedIds.addAll(reviews.map((r) => r.id));
+                            } else {
+                              _selectedIds.removeAll(reviews.map((r) => r.id));
+                            }
+                          })
+                        : null,
+                    onHide: isAdmin && orgId != null
+                        ? () => _hideSelected(orgId)
+                        : null,
+                    onExport: () => showExportReviewsSheet(
+                      context: context,
+                      data: ReviewExportData(
+                        surveyTitle: title,
+                        createdAt: currentForm.createdAt,
+                        avgRating: summary.avgRating,
+                        totalReviews: reviews.length,
+                        reviews: reviews,
+                        organizationName: context
+                            .read<AuthBloc>()
+                            .state
+                            .session
+                            ?.organization
+                            .name,
+                        organizationLogoUrl: context
+                            .read<AuthBloc>()
+                            .state
+                            .session
+                            ?.organization
+                            .logoUrl,
+                      ),
                     ),
                   ),
                 ),
@@ -183,12 +261,12 @@ class _AllReviewsPageState extends State<AllReviewsPage> {
                           ),
                           child: Center(
                             child: Text(
-                              _query.isEmpty &&
-                                      _ratingFilter == _RatingFilter.all &&
-                                      !_withCommentsOnly
+                              _query.isEmpty && _questionId == null
                                   ? 'No reviews yet.'
                                   : 'No reviews match your filters.',
-                              style: const TextStyle(color: FelloColors.inkSoft),
+                              style: const TextStyle(
+                                color: FelloColors.inkSoft,
+                              ),
                             ),
                           ),
                         )
@@ -198,8 +276,19 @@ class _AllReviewsPageState extends State<AllReviewsPage> {
                               if (i > 0) const SizedBox(height: 12),
                               ReviewCard(
                                 review: reviews[i],
+                                selected: _selectedIds.contains(reviews[i].id),
+                                onSelectionChanged: isAdmin
+                                    ? (selected) => setState(() {
+                                        if (selected) {
+                                          _selectedIds.add(reviews[i].id);
+                                        } else {
+                                          _selectedIds.remove(reviews[i].id);
+                                        }
+                                      })
+                                    : null,
                                 onVisibilityChanged: () {
-                                  final orgId = context
+                                  final orgId =
+                                      context
                                           .read<DashboardBloc>()
                                           .state
                                           .orgId ??
@@ -210,9 +299,9 @@ class _AllReviewsPageState extends State<AllReviewsPage> {
                                           ?.organization
                                           .id;
                                   if (orgId != null) {
-                                    context
-                                        .read<DashboardBloc>()
-                                        .add(DashboardLoadRequested(orgId));
+                                    context.read<DashboardBloc>().add(
+                                      DashboardLoadRequested(orgId),
+                                    );
                                   }
                                 },
                               ),
@@ -279,117 +368,145 @@ class _AllReviewsHeader extends StatelessWidget {
   }
 }
 
-class _FilterBar extends StatelessWidget {
-  const _FilterBar({
-    required this.ratingFilter,
-    required this.withCommentsOnly,
-    required this.sort,
-    required this.onRatingChanged,
-    required this.onCommentsToggled,
-    required this.onSortChanged,
+class _QuestionFilterBar extends StatelessWidget {
+  const _QuestionFilterBar({
+    required this.questions,
+    required this.selectedQuestionId,
+    required this.selectedAnswerValue,
+    required this.onQuestionChanged,
+    required this.onAnswerChanged,
   });
 
-  final _RatingFilter ratingFilter;
-  final bool withCommentsOnly;
-  final ReviewSort sort;
-  final ValueChanged<_RatingFilter> onRatingChanged;
-  final VoidCallback onCommentsToggled;
-  final ValueChanged<ReviewSort> onSortChanged;
+  final List<Question> questions;
+  final String? selectedQuestionId;
+  final String? selectedAnswerValue;
+  final ValueChanged<String?> onQuestionChanged;
+  final ValueChanged<String?> onAnswerChanged;
 
   @override
   Widget build(BuildContext context) {
-    Widget chip({
-      required String label,
-      required bool selected,
-      required VoidCallback onTap,
-      bool emphasis = false,
-    }) {
-      final selectedColor = emphasis ? FelloColors.ink : FelloColors.accent;
-      return Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: Material(
-          color: selected
-              ? (emphasis
-                  ? FelloColors.ink
-                  : FelloColors.accent.withValues(alpha: 0.12))
-              : FelloColors.paper,
-          borderRadius: BorderRadius.circular(999),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(999),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: selected ? selectedColor : FelloColors.border,
-                ),
-              ),
-              child: Text(
-                label,
-                style: GoogleFonts.poppins(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: selected
-                      ? (emphasis ? Colors.white : FelloColors.accent)
-                      : FelloColors.inkSoft,
-                ),
-              ),
-            ),
+    final question = questions
+        .where((q) => q.id == selectedQuestionId)
+        .firstOrNull;
+    final answers = switch (question?.type) {
+      QuestionType.singleChoice ||
+      QuestionType.multiChoice => question!.options,
+      QuestionType.yesNo => const ['Yes', 'No'],
+      QuestionType.starRating => const [
+        '1 / 5',
+        '2 / 5',
+        '3 / 5',
+        '4 / 5',
+        '5 / 5',
+      ],
+      QuestionType.nps => List.generate(11, (index) => '$index / 10'),
+      QuestionType.shortText ||
+      QuestionType.longText => const [_AllReviewsPageState._hasAnswer],
+      null => const <String>[],
+    };
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 10,
+      children: [
+        SizedBox(
+          width: 280,
+          child: DropdownButtonFormField<String>(
+            key: const ValueKey('review-question-filter'),
+            initialValue: selectedQuestionId,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Filter by question'),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('All responses')),
+              for (final item in questions)
+                DropdownMenuItem(value: item.id, child: Text(item.label)),
+            ],
+            onChanged: onQuestionChanged,
           ),
         ),
-      );
-    }
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          chip(
-            label: 'All ratings',
-            selected: ratingFilter == _RatingFilter.all,
-            onTap: () => onRatingChanged(_RatingFilter.all),
+        if (question != null)
+          SizedBox(
+            width: 220,
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('review-answer-filter-$selectedQuestionId'),
+              initialValue: selectedAnswerValue,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Answer'),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('Any answer')),
+                for (final answer in answers)
+                  DropdownMenuItem(
+                    value: answer,
+                    child: Text(
+                      answer == _AllReviewsPageState._hasAnswer
+                          ? 'Has an answer'
+                          : answer,
+                    ),
+                  ),
+              ],
+              onChanged: onAnswerChanged,
+            ),
           ),
-          chip(
-            label: '5 stars',
-            selected: ratingFilter == _RatingFilter.five,
-            onTap: () => onRatingChanged(_RatingFilter.five),
-          ),
-          chip(
-            label: '4+ stars',
-            selected: ratingFilter == _RatingFilter.fourPlus,
-            onTap: () => onRatingChanged(_RatingFilter.fourPlus),
-          ),
-          chip(
-            label: '3+ stars',
-            selected: ratingFilter == _RatingFilter.threePlus,
-            onTap: () => onRatingChanged(_RatingFilter.threePlus),
-          ),
-          chip(
-            label: 'With comments',
-            selected: withCommentsOnly,
-            onTap: onCommentsToggled,
-          ),
-          chip(
-            label: 'Recent',
-            selected: sort == ReviewSort.recent,
-            onTap: () => onSortChanged(ReviewSort.recent),
-            emphasis: true,
-          ),
-          chip(
-            label: 'Highest rated',
-            selected: sort == ReviewSort.highest,
-            onTap: () => onSortChanged(ReviewSort.highest),
-            emphasis: true,
-          ),
-          chip(
-            label: 'With photos',
-            selected: sort == ReviewSort.photos,
-            onTap: () => onSortChanged(ReviewSort.photos),
-            emphasis: true,
-          ),
-        ],
-      ),
+      ],
     );
   }
+}
+
+class _ReviewBulkToolbar extends StatelessWidget {
+  const _ReviewBulkToolbar({
+    required this.total,
+    required this.selectedCount,
+    required this.allSelected,
+    required this.showBulkActions,
+    required this.hiding,
+    required this.onSelectAll,
+    required this.onHide,
+    required this.onExport,
+  });
+
+  final int total;
+  final int selectedCount;
+  final bool allSelected;
+  final bool showBulkActions;
+  final bool hiding;
+  final ValueChanged<bool>? onSelectAll;
+  final VoidCallback? onHide;
+  final VoidCallback onExport;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 12,
+    runSpacing: 8,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
+      Text(
+        '$total review${total == 1 ? '' : 's'}',
+        style: const TextStyle(color: FelloColors.inkSoft),
+      ),
+      if (showBulkActions)
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Checkbox(
+              value: allSelected,
+              onChanged: total == 0
+                  ? null
+                  : (v) => onSelectAll?.call(v ?? false),
+            ),
+            const Text('Select all'),
+          ],
+        ),
+      if (showBulkActions && selectedCount > 0)
+        OutlinedButton.icon(
+          onPressed: hiding ? null : onHide,
+          icon: const Icon(Icons.visibility_off_outlined, size: 18),
+          label: Text(hiding ? 'Hiding…' : 'Hide selected ($selectedCount)'),
+        ),
+      OutlinedButton.icon(
+        onPressed: onExport,
+        icon: const Icon(Icons.file_download_outlined, size: 18),
+        label: const Text('Export'),
+      ),
+    ],
+  );
 }

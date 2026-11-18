@@ -6,17 +6,30 @@ class Answer extends Equatable {
     required this.responseId,
     required this.questionId,
     required this.value,
+    this.questionLabel,
+    this.questionType,
   });
 
   final String id;
   final String responseId;
   final String questionId;
 
+  /// Immutable copy of the question as it was when this response was given.
+  final String? questionLabel;
+  final String? questionType;
+
   /// Flexible payload: number, string, bool, or list of strings.
   final dynamic value;
 
   @override
-  List<Object?> get props => [id, responseId, questionId, value];
+  List<Object?> get props => [
+    id,
+    responseId,
+    questionId,
+    value,
+    questionLabel,
+    questionType,
+  ];
 }
 
 class FeedbackResponse extends Equatable {
@@ -57,6 +70,12 @@ class FeedbackResponse extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [id, formId, submittedAt, metadata, answers, isPublic];
+  List<Object?> get props => [
+    id,
+    formId,
+    submittedAt,
+    metadata,
+    answers,
+    isPublic,
+  ];
 }

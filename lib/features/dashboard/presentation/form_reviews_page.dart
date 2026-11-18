@@ -8,9 +8,7 @@ import '../../../core/theme/fello_colors.dart';
 import '../../../domain/entities/feedback_form.dart';
 import '../../../shared/animations/fade_slide_in.dart';
 import '../../../shared/widgets/fello_back_button.dart';
-import '../../../shared/widgets/kaydo_toast.dart';
 import '../../auth/bloc/auth_bloc.dart';
-import '../../complaints/presentation/survey_follow_ups_section.dart';
 import '../bloc/dashboard_bloc.dart';
 import '../export/review_exporter.dart';
 import 'widgets/export_reviews_sheet.dart';
@@ -106,6 +104,18 @@ class _FormReviewsPageState extends State<FormReviewsPage> {
                             avgRating: summary.avgRating,
                             totalReviews: summary.totalReviews,
                             reviews: summary.reviews,
+                            organizationName: context
+                                .read<AuthBloc>()
+                                .state
+                                .session
+                                ?.organization
+                                .name,
+                            organizationLogoUrl: context
+                                .read<AuthBloc>()
+                                .state
+                                .session
+                                ?.organization
+                                .logoUrl,
                           ),
                         ),
                       ),
@@ -150,12 +160,9 @@ class _FormReviewsPageState extends State<FormReviewsPage> {
                               ],
                             ),
                     ),
-                    SoftPadding(
-                      padding: const EdgeInsets.fromLTRB(28, 0, 28, 36),
-                      child: SurveyFollowUpsSection(
-                        formId: formId,
-                        highlightTaskId: widget.taskId,
-                      ),
+                    const SoftPadding(
+                      padding: EdgeInsets.only(bottom: 36),
+                      child: SizedBox.shrink(),
                     ),
                   ],
                 );
@@ -235,18 +242,6 @@ class _Header extends StatelessWidget {
           icon: Icons.file_download_outlined,
           label: 'Export',
           onTap: onExport,
-        ),
-        const SizedBox(width: 10),
-        _GhostAction(
-          icon: Icons.filter_list_rounded,
-          label: 'Filter',
-          onTap: () {
-            showKaydoToast(
-              context,
-              message: 'Filters are coming soon.',
-              tone: KaydoToastTone.info,
-            );
-          },
         ),
       ],
     );

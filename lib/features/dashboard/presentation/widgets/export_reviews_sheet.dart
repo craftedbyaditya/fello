@@ -10,15 +10,16 @@ Future<void> showExportReviewsSheet({
   required BuildContext context,
   required ReviewExportData data,
 }) {
-  return showModalBottomSheet<void>(
+  return showDialog<void>(
     context: context,
-    backgroundColor: FelloColors.paper,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(FelloMetrics.dialogRadius),
+    builder: (context) => Dialog(
+      shape: FelloMetrics.dialogShape,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: _ExportReviewsSheet(data: data),
       ),
     ),
-    builder: (context) => _ExportReviewsSheet(data: data),
   );
 }
 
@@ -43,7 +44,12 @@ class _ExportReviewsSheetState extends State<_ExportReviewsSheet> {
       Navigator.pop(context);
       showKaydoToast(
         context,
-        message: success,
+        title: success == 'PDF downloaded'
+            ? 'Your PDF is ready'
+            : 'Your Excel file is ready',
+        message: success == 'PDF downloaded'
+            ? 'Your feedback report has been downloaded.'
+            : 'Your feedback spreadsheet has been downloaded.',
         tone: KaydoToastTone.success,
       );
     } catch (e) {
@@ -62,29 +68,29 @@ class _ExportReviewsSheetState extends State<_ExportReviewsSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: FelloColors.border,
-                  borderRadius: BorderRadius.circular(999),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Export reviews',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: FelloColors.ink,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Export reviews',
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: FelloColors.ink,
-              ),
+                IconButton(
+                  onPressed: _busy ? null : () => Navigator.pop(context),
+                  tooltip: 'Close',
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             Text(
@@ -101,9 +107,9 @@ class _ExportReviewsSheetState extends State<_ExportReviewsSheet> {
                 onPressed: _busy
                     ? null
                     : () => _run(
-                          () => ReviewExporter.exportPdf(widget.data),
-                          'PDF downloaded',
-                        ),
+                        () => ReviewExporter.exportPdf(widget.data),
+                        'PDF downloaded',
+                      ),
                 icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
                 label: const Text('Download PDF'),
               ),
@@ -115,9 +121,9 @@ class _ExportReviewsSheetState extends State<_ExportReviewsSheet> {
                 onPressed: _busy
                     ? null
                     : () => _run(
-                          () => ReviewExporter.exportExcel(widget.data),
-                          'Excel downloaded',
-                        ),
+                        () => ReviewExporter.exportExcel(widget.data),
+                        'Excel downloaded',
+                      ),
                 icon: const Icon(Icons.grid_on_outlined, size: 18),
                 label: const Text('Download Excel'),
               ),

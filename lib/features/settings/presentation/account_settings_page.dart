@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/di/service_locator.dart';
 import '../../../core/theme/fello_colors.dart';
+import '../../../domain/repositories/auth_repository.dart';
+import '../../../shared/widgets/fello_text_field.dart';
+import '../../../shared/widgets/kaydo_toast.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import 'workspace_logo_page.dart';
 
@@ -40,7 +44,9 @@ class AccountSettingsPage extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(28, 28, 28, 48),
       children: [
         Text('Settings', style: theme.textTheme.headlineLarge),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
+        const _OrganizationNameCard(),
+        const SizedBox(height: 16),
         LayoutBuilder(
           builder: (context, constraints) {
             final stacked = constraints.maxWidth < 620;
@@ -53,7 +59,7 @@ class AccountSettingsPage extends StatelessWidget {
                     children: [cards[0], const SizedBox(height: 16), cards[1]],
                   )
                 : SizedBox(
-                    height: 220,
+                    height: 190,
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -67,13 +73,83 @@ class AccountSettingsPage extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: 150,
+          height: 112,
           child: const _TeamComingSoonCard(
             icon: Icons.group_outlined,
             title: 'Manage team',
           ),
         ),
       ],
+    );
+  }
+}
+
+class _OrganizationNameCard extends StatelessWidget {
+  const _OrganizationNameCard();
+
+  Future<void> _edit(BuildContext context) async {
+    final organization = context.read<AuthBloc>().state.session!.organization;
+    final controller = TextEditingController(text: organization.name);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Organization name'),
+        content: FelloTextField(
+          label: 'Name',
+          controller: controller,
+          textCapitalization: TextCapitalization.words,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+              try {
+                final updated = await getIt<AuthRepository>()
+                    .updateOrganization(name: name);
+                if (!dialogContext.mounted) return;
+                Navigator.pop(dialogContext);
+                context.read<AuthBloc>().add(AuthOrganizationUpdated(updated));
+                showKaydoToast(context, message: 'Organization name updated');
+              } catch (_) {
+                if (!dialogContext.mounted) return;
+                showKaydoToast(
+                  dialogContext,
+                  message: "We couldn't update the organization name.",
+                  tone: KaydoToastTone.error,
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = context.watch<AuthBloc>().state.session!.organization.name;
+    return _Panel(
+      icon: Icons.business_outlined,
+      title: 'Organization',
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(name, style: Theme.of(context).textTheme.titleMedium),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => _edit(context),
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            label: const Text('Edit name'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -97,35 +173,53 @@ class _TeamComingSoonCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: FelloColors.border),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(icon, color: FelloColors.accent, size: 24),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
+            Container(
+              width: 42,
+              height: 42,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: FelloColors.mist,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: FelloColors.accent, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    'Coming soon',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: FelloColors.inkSoft,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: FelloColors.mist,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Coming soon',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: FelloColors.inkSoft,
-                    fontWeight: FontWeight.w600,
-                  ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: FelloColors.mist,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'Not available',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: FelloColors.inkSoft,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -143,9 +237,9 @@ class _LogoSettingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return _Panel(
       icon: Icons.image_outlined,
-      title: 'Upload logo',
+      title: 'Workspace logo',
       child: const SizedBox(
-        height: 134,
+        height: 106,
         child: WorkspaceLogoPage(embedded: true),
       ),
     );

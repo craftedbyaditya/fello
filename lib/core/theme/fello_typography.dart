@@ -7,7 +7,8 @@ import 'fello_colors.dart';
 ///
 /// Compact (<720), regular (720–1100), comfortable (>1100).
 abstract final class FelloTypography {
-  static double _width(BuildContext context) => MediaQuery.sizeOf(context).width;
+  static double _width(BuildContext context) =>
+      MediaQuery.sizeOf(context).width;
 
   static bool isCompact(BuildContext context) => _width(context) < 720;
 
@@ -26,8 +27,8 @@ abstract final class FelloTypography {
     final size = isCompact(context)
         ? 20.0
         : isComfortable(context)
-            ? 24.0
-            : 22.0;
+        ? 24.0
+        : 22.0;
     return GoogleFonts.poppins(
       fontSize: size,
       fontWeight: FontWeight.w600,
@@ -37,7 +38,7 @@ abstract final class FelloTypography {
   }
 
   static TextStyle pageSubtitle(BuildContext context) {
-    final size = isCompact(context) ? 13.0 : 14.0;
+    final size = isCompact(context) ? 12.0 : 12.5;
     return GoogleFonts.poppins(
       fontSize: size,
       fontWeight: FontWeight.w400,
@@ -108,11 +109,7 @@ class FelloPageHeader extends StatelessWidget {
         if (constraints.maxWidth < 640) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              titleBlock,
-              const SizedBox(height: 12),
-              trailing!,
-            ],
+            children: [titleBlock, const SizedBox(height: 12), trailing!],
           );
         }
         return Row(

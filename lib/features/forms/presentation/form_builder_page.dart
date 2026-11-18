@@ -35,6 +35,7 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
   bool _hydrating = false;
   bool _isDirty = false;
   bool _savingDraft = false;
+  bool _isEditing = false;
 
   @override
   void initState() {
@@ -238,21 +239,30 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
                           const SizedBox(height: 18),
                           _SectionBox(
                             title: 'General details',
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                FelloTextField(
-                                  label: 'Title',
-                                  controller: _title,
-                                ),
-                                const SizedBox(height: 14),
-                                FelloTextField(
-                                  label: 'Description (optional)',
-                                  controller: _description,
-                                  maxLines: 3,
-                                ),
-                              ],
+                            trailing: OutlinedButton.icon(
+                              onPressed: () =>
+                                  setState(() => _isEditing = true),
+                              icon: const Icon(Icons.edit_outlined, size: 16),
+                              label: Text(_isEditing ? 'Editing' : 'Edit'),
                             ),
+                            child: _isEditing
+                                ? Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      FelloTextField(
+                                        label: 'Title',
+                                        controller: _title,
+                                      ),
+                                      const SizedBox(height: 14),
+                                      FelloTextField(
+                                        label: 'Description (optional)',
+                                        controller: _description,
+                                        maxLines: 3,
+                                      ),
+                                    ],
+                                  )
+                                : _GeneralDetailsReadOnly(form: form),
                           ),
                           const SizedBox(height: 16),
                           _SectionBox(
@@ -260,7 +270,9 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
                             trailing: SizedBox(
                               height: FelloMetrics.controlHeight,
                               child: FilledButton(
-                                onPressed: () => _addQuestion(form),
+                                onPressed: _isEditing
+                                    ? () => _addQuestion(form)
+                                    : null,
                                 style: FilledButton.styleFrom(
                                   minimumSize: FelloMetrics.controlMinSize,
                                   maximumSize: FelloMetrics.controlMaxSize,
@@ -295,15 +307,21 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
                                           typeLabel: _typeLabel(
                                             form.questions[i].type,
                                           ),
-                                          canDelete: isAdmin,
-                                          onEdit: () =>
-                                              _editQuestion(form.questions[i]),
-                                          onDelete: () =>
-                                              context.read<FormsBloc>().add(
-                                                QuestionDeleteRequested(
-                                                  form.questions[i].id,
-                                                ),
-                                              ),
+                                          canDelete: isAdmin && _isEditing,
+                                          onEdit: _isEditing
+                                              ? () => _editQuestion(
+                                                  form.questions[i],
+                                                )
+                                              : null,
+                                          onDelete: _isEditing
+                                              ? () => context
+                                                    .read<FormsBloc>()
+                                                    .add(
+                                                      QuestionDeleteRequested(
+                                                        form.questions[i].id,
+                                                      ),
+                                                    )
+                                              : null,
                                         ),
                                       ],
                                     ],
@@ -317,8 +335,8 @@ class _FormBuilderPageState extends State<FormBuilderPage> {
               ),
               _BottomActions(
                 busy: busy,
-                hasChanges: _isDirty,
-                canPublish: _isDirty && form.questions.isNotEmpty,
+                hasChanges: _isEditing && _isDirty,
+                canPublish: _isEditing && _isDirty && form.questions.isNotEmpty,
                 onSaveDraft: () => _saveDraft(form),
                 onPublish: () => _publish(form),
               ),
@@ -370,27 +388,52 @@ class _SectionBox extends StatelessWidget {
   }
 }
 
+class _GeneralDetailsReadOnly extends StatelessWidget {
+  const _GeneralDetailsReadOnly({required this.form});
+
+  final FeedbackForm form;
+
+  @override
+  Widget build(BuildContext context) {
+    final description = form.description.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Title', style: Theme.of(context).textTheme.labelMedium),
+        const SizedBox(height: 4),
+        Text(form.title.isEmpty ? 'Untitled survey' : form.title),
+        if (description.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Text('Description', style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: 4),
+          Text(description, style: const TextStyle(color: FelloColors.inkSoft)),
+        ],
+      ],
+    );
+  }
+}
+
 class _QuestionTile extends StatelessWidget {
   const _QuestionTile({
     required this.question,
     required this.typeLabel,
     required this.canDelete,
-    required this.onEdit,
-    required this.onDelete,
+    this.onEdit,
+    this.onDelete,
   });
 
   final Question question;
   final String typeLabel;
   final bool canDelete;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+      padding: const EdgeInsets.fromLTRB(14, 14, 8, 14),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAF9),
         borderRadius: BorderRadius.circular(10),
@@ -411,26 +454,7 @@ class _QuestionTile extends StatelessWidget {
                     height: 1.25,
                   ),
                 ),
-                if (question.type == QuestionType.multiChoice &&
-                    question.options.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (final option in question.options) ...[
-                          _Tag(
-                            label: option,
-                            background: const Color(0xFFF3F4F6),
-                            foreground: FelloColors.inkSoft,
-                          ),
-                          const SizedBox(width: 6),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
                   runSpacing: 4,
@@ -451,6 +475,22 @@ class _QuestionTile extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (question.type == QuestionType.multiChoice &&
+                    question.options.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final option in question.options)
+                        _Tag(
+                          label: option,
+                          background: const Color(0xFFF3F4F6),
+                          foreground: FelloColors.inkSoft,
+                        ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

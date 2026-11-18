@@ -19,7 +19,9 @@ class SupabaseFormRepository implements FormRepository {
         .select('*, questions(*)')
         .eq('org_id', orgId)
         .order('created_at', ascending: false);
-    return (rows as List).map((r) => _mapForm(r as Map<String, dynamic>)).toList();
+    return (rows as List)
+        .map((r) => _mapForm(r as Map<String, dynamic>))
+        .toList();
   }
 
   @override
@@ -37,14 +39,24 @@ class SupabaseFormRepository implements FormRepository {
   Future<FeedbackForm?> getPublishedBySlug(String slug) async {
     final row = await _client
         .from('forms')
-        .select(
-          '*, questions(*), organizations(logo_url, show_logo_on_forms, plan_id)',
-        )
+        .select('*, organizations(logo_url, show_logo_on_forms, plan_id)')
         .eq('slug', slug)
         .eq('status', 'published')
         .maybeSingle();
     if (row == null) return null;
-    return _mapForm(row);
+    final form = Map<String, dynamic>.from(row);
+    final versionId = form['active_version_id'] as String?;
+    if (versionId == null) return null;
+    final version = await _client
+        .from('form_versions')
+        .select('title, description, questions')
+        .eq('id', versionId)
+        .maybeSingle();
+    if (version == null) return null;
+    form['title'] = version['title'];
+    form['description'] = version['description'];
+    form['questions'] = version['questions'];
+    return _mapForm(form);
   }
 
   @override
@@ -95,13 +107,10 @@ class SupabaseFormRepository implements FormRepository {
 
   @override
   Future<FeedbackForm> publishForm(String formId) async {
-    final row = await _client
-        .from('forms')
-        .update({'status': 'published'})
-        .eq('id', formId)
-        .select('*, questions(*)')
-        .single();
-    return _mapForm(row);
+    await _client.rpc('publish_form_version', params: {'p_form_id': formId});
+    final form = await getForm(formId);
+    if (form == null) throw StateError('Published form could not be loaded.');
+    return form;
   }
 
   @override
@@ -151,10 +160,7 @@ class SupabaseFormRepository implements FormRepository {
   }
 
   @override
-  Future<void> reorderQuestions(
-    String formId,
-    List<String> questionIds,
-  ) async {
+  Future<void> reorderQuestions(String formId, List<String> questionIds) async {
     for (var i = 0; i < questionIds.length; i++) {
       await _client
           .from('questions')
@@ -164,10 +170,11 @@ class SupabaseFormRepository implements FormRepository {
   }
 
   FeedbackForm _mapForm(Map<String, dynamic> row) {
-    final questions = (row['questions'] as List? ?? [])
-        .map((q) => _mapQuestion(q as Map<String, dynamic>))
-        .toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final questions =
+        (row['questions'] as List? ?? [])
+            .map((q) => _mapQuestion(q as Map<String, dynamic>))
+            .toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     final org = row['organizations'];
     String? logoUrl;
     var showLogo = false;

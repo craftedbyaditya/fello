@@ -50,4 +50,30 @@ void main() {
     expect(migration, contains('global_feature_flag_audit'));
     expect(migration, contains('platform operator required'));
   });
+
+  test(
+    'published survey versions preserve historical response definitions',
+    () {
+      final migration = File(
+        'supabase/migrations/20261118120000_form_versioning.sql',
+      ).readAsStringSync();
+
+      expect(
+        migration,
+        contains('create table if not exists public.form_versions'),
+      );
+      expect(migration, contains('question_snapshot jsonb not null'));
+      expect(migration, contains('on delete set null'));
+      expect(
+        migration,
+        contains('public.publish_form_version(p_form_id uuid)'),
+      );
+      expect(
+        migration,
+        contains("set status = 'published', active_version_id = v_version_id"),
+      );
+      expect(migration, contains('jsonb_to_recordset(v_version.questions)'));
+      expect(migration, contains('PUBLISH_VIA_VERSION_REQUIRED'));
+    },
+  );
 }

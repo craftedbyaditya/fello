@@ -36,9 +36,9 @@ class FelloTextField extends StatefulWidget {
     this.prefixIcon,
     this.suffixIcon,
   }) : assert(
-          controller == null || initialValue == null,
-          'Provide either a controller or an initialValue, not both.',
-        );
+         controller == null || initialValue == null,
+         'Provide either a controller or an initialValue, not both.',
+       );
 
   /// Shown above the field. Omit when the surrounding UI already provides context.
   final String? label;
@@ -107,9 +107,7 @@ class _FelloTextFieldState extends State<FelloTextField> {
         visualDensity: VisualDensity.compact,
         constraints: FelloMetrics.iconBoxConstraints,
         icon: Icon(
-          _obscured
-              ? Icons.visibility_outlined
-              : Icons.visibility_off_outlined,
+          _obscured ? Icons.visibility_outlined : Icons.visibility_off_outlined,
           size: 20,
           color: FelloColors.inkSoft,
         ),
@@ -133,8 +131,7 @@ class _FelloTextFieldState extends State<FelloTextField> {
         ],
         TextFormField(
           controller: widget.controller,
-          initialValue:
-              widget.controller == null ? widget.initialValue : null,
+          initialValue: widget.controller == null ? widget.initialValue : null,
           focusNode: widget.focusNode,
           validator: widget.validator,
           onChanged: widget.onChanged,
@@ -159,8 +156,9 @@ class _FelloTextFieldState extends State<FelloTextField> {
           minLines: widget.minLines,
           maxLength: widget.maxLength,
           inputFormatters: widget.inputFormatters,
-          textAlignVertical:
-              singleLine ? TextAlignVertical.center : TextAlignVertical.top,
+          textAlignVertical: singleLine
+              ? TextAlignVertical.center
+              : TextAlignVertical.top,
           style: theme.textTheme.bodyLarge?.copyWith(
             color: FelloColors.ink,
             fontWeight: FontWeight.w500,
@@ -178,12 +176,17 @@ class _FelloTextFieldState extends State<FelloTextField> {
             contentPadding: singleLine
                 ? FelloMetrics.fieldContentPadding
                 : FelloMetrics.fieldContentPaddingMultiline,
-            // Lock the input box height; error/helper render below it.
+            // Every one-line field gets an invisible, zero-width suffix slot.
+            // It preserves the same 48px input geometry as a password field
+            // with an eye icon, without reserving horizontal space for email
+            // and other plain inputs. Error/helper text still renders below.
             constraints: singleLine ? FelloMetrics.fieldBoxConstraints : null,
             prefixIcon: widget.prefixIcon,
-            suffixIcon: suffix,
+            suffixIcon: suffix ?? const SizedBox.shrink(),
             prefixIconConstraints: FelloMetrics.iconBoxConstraints,
-            suffixIconConstraints: FelloMetrics.iconBoxConstraints,
+            suffixIconConstraints: singleLine
+                ? FelloMetrics.fieldHeightSuffixConstraints
+                : FelloMetrics.iconBoxConstraints,
           ),
         ),
       ],
