@@ -77,10 +77,17 @@ class SupabaseAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<AuthSession> signInWithGoogleIdToken({required String idToken}) async {
+  Future<AuthSession> signInWithGoogleIdToken({
+    required String idToken,
+    required String nonce,
+  }) async {
     try {
       await _client.auth
-          .signInWithIdToken(provider: OAuthProvider.google, idToken: idToken)
+          .signInWithIdToken(
+            provider: OAuthProvider.google,
+            idToken: idToken,
+            nonce: nonce,
+          )
           .timeout(_timeout);
       final session = await _loadSessionWithRetry();
       if (session == null) {

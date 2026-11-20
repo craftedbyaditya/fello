@@ -33,11 +33,15 @@ final class AuthGoogleOAuthRequested extends AuthEvent {
 }
 
 final class AuthGoogleIdTokenSubmitted extends AuthEvent {
-  const AuthGoogleIdTokenSubmitted(this.idToken);
+  const AuthGoogleIdTokenSubmitted({
+    required this.idToken,
+    required this.nonce,
+  });
   final String idToken;
+  final String nonce;
 
   @override
-  List<Object?> get props => [idToken];
+  List<Object?> get props => [idToken, nonce];
 }
 
 final class AuthSignUpSubmitted extends AuthEvent {

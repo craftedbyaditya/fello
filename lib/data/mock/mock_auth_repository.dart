@@ -51,7 +51,10 @@ class MockAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<AuthSession> signInWithGoogleIdToken({required String idToken}) async {
+  Future<AuthSession> signInWithGoogleIdToken({
+    required String idToken,
+    required String nonce,
+  }) async {
     throw AuthFailure('Google sign-in is unavailable in the local demo.');
   }
 

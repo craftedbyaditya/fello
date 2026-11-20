@@ -27,7 +27,10 @@ abstract class AuthRepository {
 
   /// Exchanges a Google Identity Services One Tap ID token for a Supabase
   /// session. The browser never receives a Supabase service-role credential.
-  Future<AuthSession> signInWithGoogleIdToken({required String idToken});
+  Future<AuthSession> signInWithGoogleIdToken({
+    required String idToken,
+    required String nonce,
+  });
 
   Future<AuthSession> signUp({
     required String email,
