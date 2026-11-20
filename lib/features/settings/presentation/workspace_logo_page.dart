@@ -408,33 +408,32 @@ class _WorkspaceLogoPageState extends State<WorkspaceLogoPage> {
     required VoidCallback onAction,
   }) {
     final theme = Theme.of(context);
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        if (body != null) ...[
+          const SizedBox(height: 6),
+          Text(body, style: theme.textTheme.bodyMedium),
+        ],
+        const SizedBox(height: 14),
+        OutlinedButton(onPressed: onAction, child: Text(actionLabel)),
+      ],
+    );
+
+    if (widget.embedded) return content;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleLarge,
-              ),
-              if (body != null) ...[
-                const SizedBox(height: 10),
-                Text(
-                  body,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: FelloColors.inkSoft,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 20),
-              FilledButton(onPressed: onAction, child: Text(actionLabel)),
-            ],
-          ),
+          child: content,
         ),
       ),
     );

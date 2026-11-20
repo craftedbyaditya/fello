@@ -41,12 +41,17 @@ class AccountSettingsPage extends StatelessWidget {
 
     final theme = Theme.of(context);
     return ListView(
-      padding: const EdgeInsets.fromLTRB(28, 28, 28, 48),
+      padding: const EdgeInsets.fromLTRB(28, 32, 28, 48),
       children: [
         Text('Settings', style: theme.textTheme.headlineLarge),
-        const SizedBox(height: 20),
+        const SizedBox(height: 4),
+        Text(
+          'Manage your workspace, branding, and subscription.',
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 24),
         const _OrganizationNameCard(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
         LayoutBuilder(
           builder: (context, constraints) {
             final stacked = constraints.maxWidth < 620;
@@ -58,26 +63,20 @@ class AccountSettingsPage extends StatelessWidget {
                 ? Column(
                     children: [cards[0], const SizedBox(height: 16), cards[1]],
                   )
-                : SizedBox(
-                    height: 190,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(child: cards[0]),
-                        const SizedBox(width: 16),
-                        Expanded(child: cards[1]),
-                      ],
-                    ),
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: cards[0]),
+                      const SizedBox(width: 16),
+                      Expanded(child: cards[1]),
+                    ],
                   );
           },
         ),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 112,
-          child: const _TeamComingSoonCard(
-            icon: Icons.group_outlined,
-            title: 'Manage team',
-          ),
+        const SizedBox(height: 24),
+        const _TeamComingSoonCard(
+          icon: Icons.group_outlined,
+          title: 'Manage team',
         ),
       ],
     );
@@ -141,9 +140,13 @@ class _OrganizationNameCard extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(name, style: Theme.of(context).textTheme.titleMedium),
+            child: Text(
+              name,
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w500),
+            ),
           ),
-          OutlinedButton.icon(
+          TextButton.icon(
             onPressed: () => _edit(context),
             icon: const Icon(Icons.edit_outlined, size: 16),
             label: const Text('Edit name'),
@@ -163,68 +166,12 @@ class _TeamComingSoonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Material(
-      color: FelloColors.paper,
-      borderRadius: BorderRadius.circular(16),
-      child: Ink(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: FelloColors.border),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: FelloColors.mist,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: FelloColors.accent, size: 22),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    'Coming soon',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: FelloColors.inkSoft,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: FelloColors.mist,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'Not available',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: FelloColors.inkSoft,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
+    return _Panel(
+      icon: icon,
+      title: title,
+      child: Text(
+        'Team management will be available soon.',
+        style: theme.textTheme.bodyMedium,
       ),
     );
   }
@@ -258,25 +205,22 @@ class _SubscriptionSettingsCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Current plan: ${plan.name}',
+            plan.name,
             style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            plan.priceLabel,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: FelloColors.inkSoft,
-              fontSize: 12,
-            ),
+            'Current plan · ${plan.priceLabel}',
+            style: theme.textTheme.bodySmall,
           ),
-          const SizedBox(height: 20),
-          FilledButton.icon(
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
             onPressed: () => context.go('/settings/billing'),
             icon: const Icon(Icons.arrow_upward_rounded, size: 16),
             label: const Text('Upgrade plan'),
-            style: FilledButton.styleFrom(
+            style: OutlinedButton.styleFrom(
               minimumSize: const Size(0, 40),
               padding: const EdgeInsets.symmetric(horizontal: 14),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -311,12 +255,7 @@ class _Panel extends StatelessWidget {
             children: [
               Icon(icon, color: FelloColors.accent, size: 24),
               const SizedBox(width: 10),
-              Text(
-                title,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              Text(title, style: theme.textTheme.titleMedium),
             ],
           ),
           const SizedBox(height: 10),

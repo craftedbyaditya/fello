@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'google_one_tap_credential.dart';
 import 'google_one_tap_stub.dart'
     if (dart.library.html) 'google_one_tap_web.dart'
     as impl;
@@ -17,7 +18,7 @@ class GoogleOneTap extends StatelessWidget {
   });
 
   final String clientId;
-  final ValueChanged<String> onCredential;
+  final ValueChanged<GoogleOneTapCredential> onCredential;
 
   @override
   Widget build(BuildContext context) {

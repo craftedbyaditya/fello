@@ -11,6 +11,7 @@ import '../../../shared/animations/fade_slide_in.dart';
 import '../../../shared/widgets/fello_logo.dart';
 import '../../../shared/widgets/fello_text_field.dart';
 import 'widgets/google_one_tap.dart';
+import 'widgets/google_one_tap_credential.dart';
 import '../bloc/auth_bloc.dart';
 
 class AuthPage extends StatefulWidget {
@@ -121,9 +122,13 @@ class _AuthPageState extends State<AuthPage> {
                     onGoogleOAuth: () => context.read<AuthBloc>().add(
                       const AuthGoogleOAuthRequested(),
                     ),
-                    onGoogleCredential: (idToken) => context
-                        .read<AuthBloc>()
-                        .add(AuthGoogleIdTokenSubmitted(idToken)),
+                    onGoogleCredential: (credential) =>
+                        context.read<AuthBloc>().add(
+                          AuthGoogleIdTokenSubmitted(
+                            idToken: credential.idToken,
+                            nonce: credential.nonce,
+                          ),
+                        ),
                     privacyRecognizer: _privacyRecognizer,
                     termsRecognizer: _termsRecognizer,
                     toggleRecognizer: _toggleRecognizer,
@@ -197,7 +202,7 @@ class _AuthFormPanel extends StatelessWidget {
   final VoidCallback onSubmit;
   final String googleWebClientId;
   final VoidCallback onGoogleOAuth;
-  final ValueChanged<String> onGoogleCredential;
+  final ValueChanged<GoogleOneTapCredential> onGoogleCredential;
   final TapGestureRecognizer privacyRecognizer;
   final TapGestureRecognizer termsRecognizer;
   final TapGestureRecognizer toggleRecognizer;

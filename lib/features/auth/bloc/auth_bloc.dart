@@ -120,6 +120,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final session = await _authRepository.signInWithGoogleIdToken(
         idToken: event.idToken,
+        nonce: event.nonce,
       );
       emit(
         AuthState.authenticated(

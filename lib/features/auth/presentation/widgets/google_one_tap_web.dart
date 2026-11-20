@@ -1,8 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:js_interop';
+import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
+
+import 'google_one_tap_credential.dart';
 
 @JS('google.accounts.id')
 external JSGoogleIdentity? get _googleIdentity;
@@ -24,7 +29,7 @@ class GoogleOneTapPlatform extends StatefulWidget {
   });
 
   final String clientId;
-  final ValueChanged<String> onCredential;
+  final ValueChanged<GoogleOneTapCredential> onCredential;
 
   @override
   State<GoogleOneTapPlatform> createState() => _GoogleOneTapPlatformState();
@@ -32,6 +37,7 @@ class GoogleOneTapPlatform extends StatefulWidget {
 
 class _GoogleOneTapPlatformState extends State<GoogleOneTapPlatform> {
   bool _started = false;
+  late String _rawNonce;
 
   @override
   void initState() {
@@ -42,12 +48,16 @@ class _GoogleOneTapPlatformState extends State<GoogleOneTapPlatform> {
   @override
   void didUpdateWidget(covariant GoogleOneTapPlatform oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.clientId != widget.clientId) unawaited(_start());
+    if (oldWidget.clientId != widget.clientId) {
+      _started = false;
+      unawaited(_start());
+    }
   }
 
   Future<void> _start() async {
     if (_started || widget.clientId.trim().isEmpty) return;
     _started = true;
+    _rawNonce = _generateRawNonce();
     await _ensureGoogleScript();
     if (!mounted) return;
     final identity = _googleIdentity;
@@ -61,16 +71,28 @@ class _GoogleOneTapPlatformState extends State<GoogleOneTapPlatform> {
             'cancel_on_tap_outside': true,
             'context': 'signin',
             'itp_support': true,
+            // Supabase validates this against the `nonce` claim in the Google
+            // ID token. Google receives the SHA-256 digest; Supabase receives
+            // the original value when the credential is exchanged.
+            'nonce': sha256.convert(utf8.encode(_rawNonce)).toString(),
             'callback': (JSGoogleCredentialResponse response) {
               final credential = response.credential?.toDart;
               if (credential != null && credential.isNotEmpty) {
-                widget.onCredential(credential);
+                widget.onCredential(
+                  GoogleOneTapCredential(idToken: credential, nonce: _rawNonce),
+                );
               }
             }.toJS,
           }.jsify()!
           as JSObject,
     );
     identity.prompt();
+  }
+
+  String _generateRawNonce() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(32, (_) => random.nextInt(256));
+    return base64UrlEncode(bytes).replaceAll('=', '');
   }
 
   Future<void> _ensureGoogleScript() async {
