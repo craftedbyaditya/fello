@@ -78,6 +78,7 @@ class ReviewItem {
     required this.location,
     required this.stars,
     required this.answers,
+    this.formVersion,
     this.isPublic = false,
   });
 
@@ -88,6 +89,7 @@ class ReviewItem {
   final String location;
   final int stars;
   final List<ReviewAnswer> answers;
+  final int? formVersion;
   final bool isPublic;
 
   bool get hasTextAnswer => answers.any(
@@ -238,13 +240,14 @@ class ReviewSummary {
           formId: form.id,
           displayName: metaName is String && metaName.trim().isNotEmpty
               ? metaName.trim()
-              : responseDisplayId(response.id),
+              : visibleResponseId(response.id),
           submittedAt: submitted,
           location: metaLocation is String && metaLocation.trim().isNotEmpty
               ? metaLocation.trim()
               : 'Web',
           stars: stars,
           answers: mappedAnswers,
+          formVersion: response.formVersion,
           isPublic: response.isPublic,
         ),
       );
@@ -310,6 +313,11 @@ String responseDisplayId(String responseId) {
       : compact.substring(0, compact.length.clamp(0, 8)).toUpperCase();
   return shortId;
 }
+
+/// A short, neutral response identifier. The hash prefix makes it visually
+/// distinct from a person's name while avoiding sequential respondent labels.
+String visibleResponseId(String responseId) =>
+    '#${responseDisplayId(responseId)}';
 
 String readableResponseTimestamp(DateTime submittedAt) =>
     DateFormat('MMM d, y, h:mm a').format(submittedAt);
@@ -466,7 +474,9 @@ class _ReviewDetailDialogState extends State<_ReviewDetailDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          review.displayName,
+                          review.displayName.startsWith('#')
+                              ? review.displayName
+                              : '#${review.displayName}',
                           style: GoogleFonts.poppins(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
@@ -475,7 +485,7 @@ class _ReviewDetailDialogState extends State<_ReviewDetailDialog> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '$timestamp · ${review.location}',
+                          timestamp,
                           style: GoogleFonts.poppins(
                             fontSize: 12.5,
                             color: FelloColors.inkSoft,
@@ -669,7 +679,6 @@ class ReviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final timestamp = readableResponseTimestamp(review.submittedAt);
     final initials = reviewInitials(review.displayName);
-    final preview = review.previewText;
     final details = <ReviewAnswer>[];
     for (final answer in review.answers) {
       if (!answer.hasValue) continue;
@@ -752,11 +761,33 @@ class ReviewCard extends StatelessWidget {
                             ),
                           ),
                         ],
+                        if (review.formVersion != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: FelloColors.paper,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: FelloColors.border),
+                            ),
+                            child: Text(
+                              'Version ${review.formVersion}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: FelloColors.inkSoft,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '$timestamp · $preview',
+                      timestamp,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.poppins(

@@ -54,6 +54,32 @@ If confirmations stay on, signup creates the user but returns no session — Kay
 
 Password reset uses `/reset-password`. Keep that path under Redirect URLs (`https://kaydo.sayge.in/**`).
 
+## 3b. Google One Tap and Google sign-in (optional)
+
+Kaydo keeps Google sign-in disabled until `GOOGLE_WEB_CLIENT_ID` is present in
+the frontend build. Configure it in this order:
+
+1. In Google Cloud Console, configure the OAuth consent screen, Terms of
+   Service, and Privacy Policy. Create an **OAuth 2.0 Web application** client.
+2. Add `https://kaydo.sayge.in` under **Authorized JavaScript origins**. Add
+   `http://localhost:3847` only for local testing. Under **Authorized redirect
+   URIs**, add Supabase's OAuth callback:
+   `https://wpqazaqbxuwoarouwphy.supabase.co/auth/v1/callback`. Do not add
+   broad wildcards.
+3. In Supabase Dashboard → Authentication → Providers → Google, enable Google
+   and enter the Web Client ID and Client Secret. The secret stays in Supabase;
+   it is never a Flutter or GitHub variable.
+4. In Supabase Dashboard → Authentication → URL Configuration, keep
+   `https://kaydo.sayge.in/**` in the redirect allow-list.
+5. Add the public Web Client ID to GitHub Environment `production` as the
+   variable `GOOGLE_WEB_CLIENT_ID`, and optionally to local `.env.production`.
+6. Deploy the frontend, test the visible **Continue with Google** fallback,
+   then test the Google-owned One Tap prompt in a clean browser profile.
+
+One Tap is an enhancement: Google may suppress it after a dismissal or because
+of browser privacy settings. Email/password and the OAuth button remain the
+supported fallbacks. Do not put a Google client secret in this repository.
+
 ## 4. Copy API keys
 
 **Project Settings → API**

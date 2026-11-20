@@ -10,6 +10,7 @@ import '../../../core/theme/fello_colors.dart';
 import '../../../shared/animations/fade_slide_in.dart';
 import '../../../shared/widgets/fello_logo.dart';
 import '../../../shared/widgets/fello_text_field.dart';
+import 'widgets/google_one_tap.dart';
 import '../bloc/auth_bloc.dart';
 
 class AuthPage extends StatefulWidget {
@@ -35,9 +36,9 @@ class _AuthPageState extends State<AuthPage> {
   void initState() {
     super.initState();
     _privacyRecognizer = TapGestureRecognizer()
-      ..onTap = () => context.push('/privacy');
+      ..onTap = () => context.go('/privacy');
     _termsRecognizer = TapGestureRecognizer()
-      ..onTap = () => context.push('/terms');
+      ..onTap = () => context.go('/terms');
     _toggleRecognizer = TapGestureRecognizer()..onTap = _toggleMode;
     _applyModeDefaults();
   }
@@ -99,6 +100,7 @@ class _AuthPageState extends State<AuthPage> {
       },
       builder: (context, state) {
         final loading = state.status == AuthStatus.loading;
+        final googleWebClientId = AppConfig.fromEnvironment().googleWebClientId;
         return Scaffold(
           backgroundColor: FelloColors.paper,
           body: LayoutBuilder(
@@ -115,6 +117,13 @@ class _AuthPageState extends State<AuthPage> {
                     displayName: _displayName,
                     errorMessage: state.errorMessage,
                     onSubmit: _submit,
+                    googleWebClientId: googleWebClientId,
+                    onGoogleOAuth: () => context.read<AuthBloc>().add(
+                      const AuthGoogleOAuthRequested(),
+                    ),
+                    onGoogleCredential: (idToken) => context
+                        .read<AuthBloc>()
+                        .add(AuthGoogleIdTokenSubmitted(idToken)),
                     privacyRecognizer: _privacyRecognizer,
                     termsRecognizer: _termsRecognizer,
                     toggleRecognizer: _toggleRecognizer,
@@ -170,6 +179,9 @@ class _AuthFormPanel extends StatelessWidget {
     required this.displayName,
     required this.errorMessage,
     required this.onSubmit,
+    required this.googleWebClientId,
+    required this.onGoogleOAuth,
+    required this.onGoogleCredential,
     required this.privacyRecognizer,
     required this.termsRecognizer,
     required this.toggleRecognizer,
@@ -183,6 +195,9 @@ class _AuthFormPanel extends StatelessWidget {
   final TextEditingController displayName;
   final String? errorMessage;
   final VoidCallback onSubmit;
+  final String googleWebClientId;
+  final VoidCallback onGoogleOAuth;
+  final ValueChanged<String> onGoogleCredential;
   final TapGestureRecognizer privacyRecognizer;
   final TapGestureRecognizer termsRecognizer;
   final TapGestureRecognizer toggleRecognizer;
@@ -217,6 +232,7 @@ class _AuthFormPanel extends StatelessWidget {
       height: 1.4,
       letterSpacing: 0.1,
     );
+    final googleEnabled = googleWebClientId.trim().isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -234,6 +250,11 @@ class _AuthFormPanel extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (!signUp && googleEnabled)
+                        GoogleOneTap(
+                          clientId: googleWebClientId,
+                          onCredential: onGoogleCredential,
+                        ),
                       const Align(
                         alignment: Alignment.centerLeft,
                         child: FelloLogo(size: 36),
@@ -364,6 +385,30 @@ class _AuthFormPanel extends StatelessWidget {
                                         ),
                                 ),
                               ),
+                              if (!signUp && googleEnabled) ...[
+                                const SizedBox(height: 18),
+                                Row(
+                                  children: [
+                                    const Expanded(child: Divider()),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                      child: Text('or', style: finePrintStyle),
+                                    ),
+                                    const Expanded(child: Divider()),
+                                  ],
+                                ),
+                                const SizedBox(height: 18),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: loading ? null : onGoogleOAuth,
+                                    icon: const _GoogleMark(),
+                                    label: const Text('Continue with Google'),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 20),
                               Text.rich(
                                 TextSpan(
@@ -475,4 +520,18 @@ class _AuthFormPanel extends StatelessWidget {
       ],
     );
   }
+}
+
+class _GoogleMark extends StatelessWidget {
+  const _GoogleMark();
+
+  @override
+  Widget build(BuildContext context) => Text(
+    'G',
+    style: GoogleFonts.poppins(
+      color: const Color(0xFF4285F4),
+      fontSize: 18,
+      fontWeight: FontWeight.w700,
+    ),
+  );
 }

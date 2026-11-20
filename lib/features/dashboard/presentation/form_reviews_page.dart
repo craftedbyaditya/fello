@@ -230,7 +230,7 @@ class _Header extends StatelessWidget {
               Text(
                 createdLabel,
                 style: GoogleFonts.poppins(
-                  fontSize: 14,
+                  fontSize: 11,
                   color: FelloColors.inkSoft,
                   fontWeight: FontWeight.w400,
                 ),
@@ -473,9 +473,11 @@ class _LeftColumn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const _PanelTitle('Ratings Breakdown'),
+        const SizedBox(height: 10),
         _PanelCard(
-          title: 'Ratings Breakdown',
           child: Column(
             children: [
               for (var star = 5; star >= 1; star--)
@@ -492,40 +494,46 @@ class _LeftColumn extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         if (summary.categoryScores.isNotEmpty)
-          _PanelCard(
-            title: 'Question averages',
-            child: Column(
-              children: [
-                for (final entry in summary.categoryScores.entries)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            entry.key,
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: FelloColors.ink,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const _PanelTitle('Question averages'),
+              const SizedBox(height: 10),
+              _PanelCard(
+                child: Column(
+                  children: [
+                    for (final entry in summary.categoryScores.entries)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                entry.key,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: FelloColors.ink,
+                                ),
+                              ),
                             ),
-                          ),
+                            Text(
+                              entry.value.toStringAsFixed(1),
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: FelloColors.ink,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ReviewStarRow(rating: entry.value, size: 14),
+                          ],
                         ),
-                        Text(
-                          entry.value.toStringAsFixed(1),
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: FelloColors.ink,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ReviewStarRow(rating: entry.value, size: 14),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
       ],
     );
@@ -590,17 +598,31 @@ class _BreakdownRow extends StatelessWidget {
   }
 }
 
-class _PanelCard extends StatelessWidget {
-  const _PanelCard({required this.title, required this.child});
-
+class _PanelTitle extends StatelessWidget {
+  const _PanelTitle(this.title);
   final String title;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    title,
+    style: GoogleFonts.poppins(
+      fontSize: 15,
+      fontWeight: FontWeight.w700,
+      color: FelloColors.ink,
+    ),
+  );
+}
+
+class _PanelCard extends StatelessWidget {
+  const _PanelCard({required this.child});
+
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
       decoration: BoxDecoration(
         color: FelloColors.paper,
         borderRadius: BorderRadius.circular(16),
@@ -613,21 +635,7 @@ class _PanelCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.poppins(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: FelloColors.ink,
-            ),
-          ),
-          const SizedBox(height: 16),
-          child,
-        ],
-      ),
+      child: child,
     );
   }
 }

@@ -30,3 +30,14 @@ Follow `.cursor/skills/fello-bloc-feature/SKILL.md` and prefer the agent briefs 
 - Production-grade Dart: null-safety, clear errors, loading/empty states.
 - `flutter analyze` clean; bloc/unit tests for changed logic.
 - Keep UX minimal: Kaydo brand, teal/charcoal theme, intentional motion.
+
+## Routine developer operations
+
+- Prefer `scripts/kaydo` for routine checks, builds, database-readiness checks,
+  GitHub status, and draft PR preparation; do not manually repeat its scripted
+  checks.
+- Use its LM Studio integration only for optional local log summaries. Read the
+  raw log when a summary is insufficient.
+- Reserve agent reasoning for engineering decisions and investigation.
+- A successful CI run is not proof that production is correct; require a
+  separate, explicit production verification.

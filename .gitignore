@@ -62,3 +62,6 @@ app.*.map.json
 
 # FVM Version Cache
 .fvm/
+
+# Local Kaydo developer-toolkit logs (may contain verbose tool output).
+.kaydo/logs/

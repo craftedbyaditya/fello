@@ -1,0 +1,226 @@
+#!/usr/bin/env bash
+# Local-only developer toolkit for Kaydo. It intentionally has no deploy,
+# migration-apply, commit, merge, or force-push command.
+set -uo pipefail
+
+# Resolve this executable before deriving paths. `~/.local/bin/kaydo` is often
+# a symlink, and its parent is not the repository's scripts directory.
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+  SOURCE_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  LINK_TARGET="$(readlink "$SOURCE")"
+  if [[ "$LINK_TARGET" == /* ]]; then
+    SOURCE="$LINK_TARGET"
+  else
+    SOURCE="$SOURCE_DIR/$LINK_TARGET"
+  fi
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
+LOG_DIR="$ROOT/.kaydo/logs"
+LM_CLIENT="$SCRIPT_DIR/kaydo_lm.py"
+PROJECT_REF="wpqazaqbxuwoarouwphy"
+EXPECTED_REMOTE='(^|[/:])craftedbyaditya/fello(\.git)?$'
+
+fail_root() {
+  printf 'FAIL: Kaydo repository could not be verified at %s.\n' "$ROOT" >&2
+  printf 'Expected Git repository: craftedbyaditya/fello.\n' >&2
+  exit 2
+}
+
+verify_repository() {
+  local git_root remotes
+  [[ -f "$ROOT/pubspec.yaml" && -f "$ROOT/scripts/kaydo_lm.py" ]] || fail_root
+  git_root="$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null)" || fail_root
+  git_root="$(cd "$git_root" && pwd -P)"
+  [[ "$git_root" == "$ROOT" ]] || fail_root
+  remotes="$(git -C "$ROOT" config --get-regexp '^remote\..*\.url$' 2>/dev/null || true)"
+  grep -Eq "$EXPECTED_REMOTE" <<<"$remotes" || fail_root
+}
+
+verify_repository
+mkdir -p "$LOG_DIR"
+
+usage() {
+  cat <<'EOF'
+Usage: kaydo <command> [options]
+
+Local developer commands (no deployment, database writes, commits, or merges):
+  check                 Run FVM analyzer and tests; save a full log.
+  build                 Run the existing production Web build script.
+  db-check              Read-only Supabase migration-history comparison.
+  pr                    Confirm, push a feature branch, then create a draft PR.
+  status                Show Git, PR, and GitHub Actions state.
+  explain [--file PATH] [--model ID]
+                        Summarize a sanitized local failure log via LM Studio.
+  pr-draft [--model ID] Generate proposed PR text from a sanitized local diff.
+  help                  Show this help.
+
+Logs are written to .kaydo/logs/. The optional LM Studio commands use only
+http://127.0.0.1:1234/v1 and never execute model suggestions.
+EOF
+}
+
+timestamp() { date '+%Y%m%dT%H%M%S'; }
+
+new_log() { printf '%s/%s-%s.log' "$LOG_DIR" "$1" "$(timestamp)"; }
+
+run_logged() {
+  local log="$1"
+  shift
+  {
+    printf 'Kaydo command started: %s\n' "$(date -Iseconds)"
+    printf 'Repository: %s\n\n' "$ROOT"
+    "$@"
+    local command_exit=$?
+    printf '\nExit code: %s\n' "$command_exit"
+    return "$command_exit"
+  } 2>&1 | tee "$log"
+  return "${PIPESTATUS[0]}"
+}
+
+flutter_cmd() {
+  if command -v fvm >/dev/null 2>&1; then
+    printf 'fvm flutter'
+  elif command -v flutter >/dev/null 2>&1; then
+    printf 'flutter'
+  else
+    return 1
+  fi
+}
+
+cmd_check() {
+  local log analyzer_exit test_exit=0
+  log="$(new_log check)"
+  cd "$ROOT"
+  if ! command -v fvm >/dev/null 2>&1; then
+    printf 'FAIL: FVM is required for kaydo check. Install/activate FVM first.\n' >&2
+    return 127
+  fi
+
+  printf 'Running Flutter analyzer. Full output: %s\n' "$log"
+  run_logged "$log" fvm flutter analyze
+  analyzer_exit=$?
+
+  printf '\nRunning Flutter tests. Appending to: %s\n' "$log"
+  {
+    printf '\n\n===== fvm flutter test =====\n'
+    fvm flutter test
+    test_exit=$?
+    printf '\nExit code: %s\n' "$test_exit"
+    return "$test_exit"
+  } 2>&1 | tee -a "$log"
+  test_exit=${PIPESTATUS[0]}
+
+  if (( analyzer_exit == 0 && test_exit == 0 )); then
+    printf 'PASS: analyzer and tests succeeded. Log: %s\n' "$log"
+    return 0
+  fi
+  printf 'FAIL: analyzer=%s, tests=%s. Log: %s\n' "$analyzer_exit" "$test_exit" "$log" >&2
+  return 1
+}
+
+cmd_build() {
+  local log
+  log="$(new_log build)"
+  cd "$ROOT"
+  printf 'Running existing production Web build. Full output: %s\n' "$log"
+  if run_logged "$log" "$ROOT/scripts/build_web.sh"; then
+    printf 'PASS: production Web build succeeded. Log: %s\n' "$log"
+    return 0
+  fi
+  printf 'FAIL: production Web build failed. The existing script reports missing configuration. Log: %s\n' "$log" >&2
+  return 1
+}
+
+cmd_db_check() {
+  local log
+  log="$(new_log db-check)"
+  cd "$ROOT"
+  if ! command -v supabase >/dev/null 2>&1; then
+    printf 'LIMITED: Supabase CLI is unavailable; remote migration history was not checked.\n' >&2
+    return 127
+  fi
+  printf 'Running strictly read-only migration comparison. Full output: %s\n' "$log"
+  if python3 "$LM_CLIENT" db-check \
+    --repo "$ROOT" \
+    --project-ref "$PROJECT_REF" \
+    --log "$log"; then
+    printf 'PASS: production migration history matches local migration files. Log: %s\n' "$log"
+    return 0
+  fi
+  printf 'FAIL/LIMITED: no database changes were made. Review: %s\n' "$log" >&2
+  return 1
+}
+
+cmd_pr() {
+  local branch answer url
+  branch="$(git -C "$ROOT" branch --show-current)"
+  if [[ -z "$branch" || "$branch" == 'main' || "$branch" == 'master' ]]; then
+    printf 'REFUSED: kaydo pr requires a feature branch; direct pushes to main are not allowed.\n' >&2
+    return 2
+  fi
+  if ! command -v gh >/dev/null 2>&1; then
+    printf 'FAIL: GitHub CLI (gh) is required.\n' >&2
+    return 127
+  fi
+  printf 'Repository: %s\nBranch: %s\nCommit: %s\n\nWorking tree:\n' "$ROOT" "$branch" "$(git -C "$ROOT" rev-parse --short HEAD)"
+  git -C "$ROOT" status --short
+  if ! git -C "$ROOT" diff --quiet || ! git -C "$ROOT" diff --cached --quiet; then
+    printf '\nNOTE: uncommitted changes will not be staged or included by this command.\n'
+  fi
+  printf '\nType PUSH to push %s and create a draft PR: ' "$branch"
+  read -r answer
+  if [[ "$answer" != 'PUSH' ]]; then
+    printf 'Cancelled. Nothing was pushed or created.\n'
+    return 0
+  fi
+  git -C "$ROOT" push -u origin "$branch"
+  url="$(gh pr create --draft --base main --head "$branch" --fill)"
+  printf 'Draft PR created: %s\n' "$url"
+}
+
+cmd_status() {
+  local branch sha
+  branch="$(git -C "$ROOT" branch --show-current)"
+  sha="$(git -C "$ROOT" rev-parse --short HEAD)"
+  printf 'Repository: %s\nBranch: %s\nCommit: %s\n\nWorking tree:\n' "$ROOT" "${branch:-detached}" "$sha"
+  git -C "$ROOT" status --short
+  if command -v gh >/dev/null 2>&1; then
+    printf '\nPull request:\n'
+    gh pr view --json url,state,isDraft,statusCheckRollup --jq 'if .url then "\\(.state) draft=\\(.isDraft) \\(.url)" else "No PR for this branch" end' 2>/dev/null || printf 'Unavailable (authenticate GitHub CLI or push a branch first).\n'
+    printf '\nRecent GitHub Actions runs:\n'
+    gh run list --branch "${branch:-main}" --limit 3 --json databaseId,status,conclusion,displayTitle,headSha \
+      --jq '.[] | "#\\(.databaseId) \\(.status)/\\(.conclusion // "pending") \\(.headSha[0:7]) — \\(.displayTitle)"' \
+      2>/dev/null || printf 'Unavailable (authenticate GitHub CLI).\n'
+  else
+    printf '\nGitHub CLI unavailable; PR and Actions status were not checked.\n'
+  fi
+  cat <<'EOF'
+
+Interpretation: CI success only shows workflow completion. It does not verify
+the deployed Hostinger files, browser behavior, or production data paths.
+EOF
+}
+
+cmd_explain() {
+  cd "$ROOT"
+  python3 "$LM_CLIENT" explain --repo "$ROOT" "$@"
+}
+
+cmd_pr_draft() {
+  cd "$ROOT"
+  python3 "$LM_CLIENT" pr-draft --repo "$ROOT" "$@"
+}
+
+case "${1:-help}" in
+  check) shift; [[ $# -eq 0 ]] || { usage >&2; exit 2; }; cmd_check ;;
+  build) shift; [[ $# -eq 0 ]] || { usage >&2; exit 2; }; cmd_build ;;
+  db-check) shift; [[ $# -eq 0 ]] || { usage >&2; exit 2; }; cmd_db_check ;;
+  pr) shift; [[ $# -eq 0 ]] || { usage >&2; exit 2; }; cmd_pr ;;
+  status) shift; [[ $# -eq 0 ]] || { usage >&2; exit 2; }; cmd_status ;;
+  explain) shift; cmd_explain "$@" ;;
+  pr-draft) shift; cmd_pr_draft "$@" ;;
+  help|-h|--help) usage ;;
+  *) printf 'Unknown command: %s\n\n' "$1" >&2; usage >&2; exit 2 ;;
+esac
