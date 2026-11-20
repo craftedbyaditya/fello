@@ -52,7 +52,8 @@ echo "Building Kaydo web → $PUBLIC_BASE_URL (DATA_SOURCE=$DATA_SOURCE)"
   --dart-define=SUPABASE_URL="$SUPABASE_URL" \
   --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
   --dart-define=APP_VERSION="$APP_VERSION" \
-  --dart-define=TURNSTILE_SITE_KEY="${TURNSTILE_SITE_KEY:-}"
+  --dart-define=TURNSTILE_SITE_KEY="${TURNSTILE_SITE_KEY:-}" \
+  --dart-define=GOOGLE_WEB_CLIENT_ID="${GOOGLE_WEB_CLIENT_ID:-}"
 
 # Ensure CNAME is present for GitHub Pages / some CDNs.
 echo 'kaydo.sayge.in' > build/web/CNAME

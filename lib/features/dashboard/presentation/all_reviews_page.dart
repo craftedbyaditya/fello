@@ -32,6 +32,7 @@ class _AllReviewsPageState extends State<AllReviewsPage> {
   final _searchController = TextEditingController();
   String? _questionId;
   String? _answerValue;
+  int? _formVersion;
   final Set<String> _selectedIds = <String>{};
   bool _hidingSelected = false;
   String _query = '';
@@ -59,6 +60,12 @@ class _AllReviewsPageState extends State<AllReviewsPage> {
 
   List<ReviewItem> _applyFilters(List<ReviewItem> all) {
     var items = sortReviews(all, ReviewSort.recent);
+
+    if (_formVersion != null) {
+      items = items
+          .where((review) => review.formVersion == _formVersion)
+          .toList();
+    }
 
     if (_questionId != null && _answerValue != null) {
       items = items.where((review) {
@@ -191,8 +198,15 @@ class _AllReviewsPageState extends State<AllReviewsPage> {
                   padding: const EdgeInsets.fromLTRB(28, 14, 28, 0),
                   child: _QuestionFilterBar(
                     questions: currentForm.questions,
+                    versions: summary.reviews
+                        .map((review) => review.formVersion)
+                        .whereType<int>()
+                        .toSet(),
+                    selectedVersion: _formVersion,
                     selectedQuestionId: _questionId,
                     selectedAnswerValue: _answerValue,
+                    onVersionChanged: (version) =>
+                        setState(() => _formVersion = version),
                     onQuestionChanged: (id) => setState(() {
                       _questionId = id;
                       _answerValue = null;
@@ -371,15 +385,21 @@ class _AllReviewsHeader extends StatelessWidget {
 class _QuestionFilterBar extends StatelessWidget {
   const _QuestionFilterBar({
     required this.questions,
+    required this.versions,
+    required this.selectedVersion,
     required this.selectedQuestionId,
     required this.selectedAnswerValue,
+    required this.onVersionChanged,
     required this.onQuestionChanged,
     required this.onAnswerChanged,
   });
 
   final List<Question> questions;
+  final Set<int> versions;
+  final int? selectedVersion;
   final String? selectedQuestionId;
   final String? selectedAnswerValue;
+  final ValueChanged<int?> onVersionChanged;
   final ValueChanged<String?> onQuestionChanged;
   final ValueChanged<String?> onAnswerChanged;
 
@@ -409,6 +429,28 @@ class _QuestionFilterBar extends StatelessWidget {
       spacing: 12,
       runSpacing: 10,
       children: [
+        if (versions.length > 1)
+          SizedBox(
+            width: 190,
+            child: DropdownButtonFormField<int>(
+              key: const ValueKey('review-version-filter'),
+              initialValue: selectedVersion,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Survey version'),
+              items: [
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text('All versions'),
+                ),
+                for (final version in versions.toList()..sort())
+                  DropdownMenuItem(
+                    value: version,
+                    child: Text('Version $version'),
+                  ),
+              ],
+              onChanged: onVersionChanged,
+            ),
+          ),
         SizedBox(
           width: 280,
           child: DropdownButtonFormField<String>(

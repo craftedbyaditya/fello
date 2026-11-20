@@ -37,6 +37,8 @@ class FeedbackResponse extends Equatable {
     required this.id,
     required this.formId,
     required this.submittedAt,
+    this.formVersionId,
+    this.formVersion,
     this.metadata = const {},
     this.answers = const [],
     this.isPublic = false,
@@ -45,6 +47,11 @@ class FeedbackResponse extends Equatable {
   final String id;
   final String formId;
   final DateTime submittedAt;
+
+  /// Immutable published survey version used for this response. Older
+  /// responses are backfilled to the first available version.
+  final String? formVersionId;
+  final int? formVersion;
   final Map<String, dynamic> metadata;
   final List<Answer> answers;
 
@@ -55,6 +62,8 @@ class FeedbackResponse extends Equatable {
     String? id,
     String? formId,
     DateTime? submittedAt,
+    String? formVersionId,
+    int? formVersion,
     Map<String, dynamic>? metadata,
     List<Answer>? answers,
     bool? isPublic,
@@ -63,6 +72,8 @@ class FeedbackResponse extends Equatable {
       id: id ?? this.id,
       formId: formId ?? this.formId,
       submittedAt: submittedAt ?? this.submittedAt,
+      formVersionId: formVersionId ?? this.formVersionId,
+      formVersion: formVersion ?? this.formVersion,
       metadata: metadata ?? this.metadata,
       answers: answers ?? this.answers,
       isPublic: isPublic ?? this.isPublic,
@@ -74,6 +85,8 @@ class FeedbackResponse extends Equatable {
     id,
     formId,
     submittedAt,
+    formVersionId,
+    formVersion,
     metadata,
     answers,
     isPublic,

@@ -11,6 +11,7 @@ class AppConfig {
     this.supabaseAnonKey = '',
     this.publicBaseUrl = productionBaseUrl,
     this.turnstileSiteKey = '',
+    this.googleWebClientId = '',
   });
 
   /// Release version injected by the production build from `pubspec.yaml`.
@@ -28,8 +29,13 @@ class AppConfig {
   /// Cloudflare Turnstile site key. Required for Supabase public submissions.
   final String turnstileSiteKey;
 
+  /// Public Google OAuth web client ID. An empty value intentionally keeps
+  /// Google One Tap and the OAuth button disabled.
+  final String googleWebClientId;
+
   bool get useMock => dataSource == DataSource.mock;
   bool get turnstileEnabled => turnstileSiteKey.trim().isNotEmpty;
+  bool get googleSignInEnabled => googleWebClientId.trim().isNotEmpty;
 
   factory AppConfig.fromEnvironment() {
     const source = String.fromEnvironment(
@@ -46,6 +52,10 @@ class AppConfig {
       'TURNSTILE_SITE_KEY',
       defaultValue: '',
     );
+    const googleWebClientId = String.fromEnvironment(
+      'GOOGLE_WEB_CLIENT_ID',
+      defaultValue: '',
+    );
 
     final dataSource = source.toLowerCase() == 'mock'
         ? DataSource.mock
@@ -57,6 +67,7 @@ class AppConfig {
       supabaseAnonKey: key,
       publicBaseUrl: _normalizeBaseUrl(base),
       turnstileSiteKey: turnstile.trim(),
+      googleWebClientId: googleWebClientId.trim(),
     );
   }
 

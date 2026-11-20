@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/fello_colors.dart';
-import '../../../shared/widgets/fello_back_button.dart';
 import '../../../shared/widgets/fello_logo.dart';
 
 class PrivacyPolicyPage extends StatelessWidget {
@@ -27,33 +26,31 @@ class PrivacyPolicyPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: FelloColors.paper,
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 8, 24, 0),
-                  child: Row(
-                    children: [
-                      FelloBackButton(
-                        onPressed: () {
-                          if (context.canPop()) {
-                            context.pop();
-                          } else {
-                            context.go('/sign-in');
-                          }
-                        },
-                      ),
-                      const SizedBox(width: 4),
-                      const FelloLogo(size: 28),
-                    ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 14, 32, 14),
+              child: Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () => context.go('/sign-in'),
+                    icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                    label: const Text('Back to sign in'),
                   ),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(32, 28, 32, 48),
+                  const Spacer(),
+                  const FelloLogo(size: 30),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: FelloColors.border),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 36, 24, 64),
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1040),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -164,9 +161,9 @@ class PrivacyPolicyPage extends StatelessWidget {
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

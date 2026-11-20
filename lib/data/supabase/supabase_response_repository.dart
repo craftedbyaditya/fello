@@ -22,7 +22,9 @@ class SupabaseResponseRepository implements ResponseRepository {
   }) async {
     var query = _client
         .from('responses')
-        .select('*, answers(*), forms!inner(org_id, id)')
+        .select(
+          '*, answers(*), forms!inner(org_id, id), form_versions(id, version)',
+        )
         .eq('forms.org_id', orgId);
 
     if (filters.formId != null) {
@@ -118,6 +120,8 @@ class SupabaseResponseRepository implements ResponseRepository {
         id: id,
         formId: formId,
         submittedAt: DateTime.now().toUtc(),
+        formVersionId: null,
+        formVersion: null,
         metadata: metadata,
         answers: answersByQuestionId.entries
             .map(
@@ -295,6 +299,7 @@ class SupabaseResponseRepository implements ResponseRepository {
   }
 
   FeedbackResponse _mapResponse(Map<String, dynamic> row) {
+    final version = row['form_versions'] as Map?;
     final answers = (row['answers'] as List? ?? []).map((a) {
       final m = a as Map<String, dynamic>;
       return Answer(
@@ -312,6 +317,8 @@ class SupabaseResponseRepository implements ResponseRepository {
       id: row['id'] as String,
       formId: row['form_id'] as String,
       submittedAt: DateTime.parse(row['submitted_at'] as String),
+      formVersionId: row['form_version_id'] as String?,
+      formVersion: version?['version'] as int?,
       metadata: Map<String, dynamic>.from(
         (row['metadata'] as Map?) ?? const {},
       ),

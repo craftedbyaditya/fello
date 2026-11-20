@@ -88,6 +88,7 @@ jobs:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
           TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+          GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
           HOSTINGER_DOCUMENT_ROOT: ${{ vars.HOSTINGER_DOCUMENT_ROOT }}
           HOSTINGER_SSH_PORT: ${{ vars.HOSTINGER_SSH_PORT }}
           HOSTINGER_SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
@@ -102,6 +103,7 @@ jobs:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
           TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+          GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
           GITHUB_SHA: ${{ needs.release-version.outputs.release_sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
         run: ./scripts/build_release_web.sh

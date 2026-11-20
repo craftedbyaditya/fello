@@ -15,6 +15,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   AuthBloc(this._authRepository) : super(const AuthState.unknown()) {
     on<AuthSubscriptionRequested>(_onSubscriptionRequested);
     on<AuthSignInSubmitted>(_onSignIn);
+    on<AuthGoogleOAuthRequested>(_onGoogleOAuth);
+    on<AuthGoogleIdTokenSubmitted>(_onGoogleIdToken);
     on<AuthSignUpSubmitted>(_onSignUp);
     on<AuthSignOutRequested>(_onSignOut);
     on<AuthSessionChanged>(_onSessionChanged);
@@ -78,14 +80,60 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         ),
       );
     } on AuthFailure catch (e) {
-      emit(
-        AuthState.unauthenticated(errorMessage: e.message),
-      );
+      emit(AuthState.unauthenticated(errorMessage: e.message));
     } catch (_) {
       emit(
         const AuthState.unauthenticated(
           errorMessage:
               'Something went wrong. Check your connection and try again.',
+        ),
+      );
+    }
+  }
+
+  Future<void> _onGoogleOAuth(
+    AuthGoogleOAuthRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(state.copyWith(status: AuthStatus.loading, clearError: true));
+    try {
+      await _authRepository.signInWithGoogleOAuth();
+      // The browser leaves this page. If a provider declines to navigate,
+      // restore the ordinary sign-in form rather than leaving it disabled.
+      emit(const AuthState.unauthenticated());
+    } on AuthFailure catch (e) {
+      emit(AuthState.unauthenticated(errorMessage: e.message));
+    } catch (_) {
+      emit(
+        const AuthState.unauthenticated(
+          errorMessage: "We couldn't start Google sign-in. Please try again.",
+        ),
+      );
+    }
+  }
+
+  Future<void> _onGoogleIdToken(
+    AuthGoogleIdTokenSubmitted event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(state.copyWith(status: AuthStatus.loading, clearError: true));
+    try {
+      final session = await _authRepository.signInWithGoogleIdToken(
+        idToken: event.idToken,
+      );
+      emit(
+        AuthState.authenticated(
+          session,
+          needsOnboarding: _needsOnboarding(session),
+        ),
+      );
+    } on AuthFailure catch (e) {
+      emit(AuthState.unauthenticated(errorMessage: e.message));
+    } catch (_) {
+      emit(
+        const AuthState.unauthenticated(
+          errorMessage:
+              "We couldn't complete Google sign-in. Please try again.",
         ),
       );
     }
@@ -110,9 +158,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         ),
       );
     } on AuthFailure catch (e) {
-      emit(
-        AuthState.unauthenticated(errorMessage: e.message),
-      );
+      emit(AuthState.unauthenticated(errorMessage: e.message));
     } catch (_) {
       emit(
         const AuthState.unauthenticated(
@@ -138,10 +184,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     if (session == null) return;
     final next = session.copyWith(organization: event.organization);
     emit(
-      AuthState.authenticated(
-        next,
-        needsOnboarding: _needsOnboarding(next),
-      ),
+      AuthState.authenticated(next, needsOnboarding: _needsOnboarding(next)),
     );
   }
 
@@ -154,8 +197,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await _authRepository.requestPasswordReset(email: event.email);
       emit(
         const AuthState.unauthenticated(
-          errorMessage:
-              'If that email is registered, we sent a reset link. Check your inbox.',
+          errorMessage: 'If that email is registered, we sent a reset link. Check your inbox.',
         ),
       );
     } on AuthFailure catch (e) {
@@ -222,12 +264,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         organizationName: event.organizationName,
         businessType: event.businessType,
       );
-      emit(
-        AuthState.authenticated(
-          session,
-          needsOnboarding: false,
-        ),
-      );
+      emit(AuthState.authenticated(session, needsOnboarding: false));
     } on AuthFailure catch (e) {
       emit(
         state.copyWith(

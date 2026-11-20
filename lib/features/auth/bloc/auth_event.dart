@@ -28,6 +28,18 @@ final class AuthSignInSubmitted extends AuthEvent {
   List<Object?> get props => [email, password];
 }
 
+final class AuthGoogleOAuthRequested extends AuthEvent {
+  const AuthGoogleOAuthRequested();
+}
+
+final class AuthGoogleIdTokenSubmitted extends AuthEvent {
+  const AuthGoogleIdTokenSubmitted(this.idToken);
+  final String idToken;
+
+  @override
+  List<Object?> get props => [idToken];
+}
+
 final class AuthSignUpSubmitted extends AuthEvent {
   const AuthSignUpSubmitted({
     required this.email,

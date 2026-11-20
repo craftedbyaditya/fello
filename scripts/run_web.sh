@@ -43,4 +43,5 @@ exec "${FLUTTER[@]}" run -d chrome --web-port=3847 \
   --dart-define=PUBLIC_BASE_URL="$PUBLIC_BASE_URL" \
   --dart-define=SUPABASE_URL="$SUPABASE_URL" \
   --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
-  --dart-define=TURNSTILE_SITE_KEY="${TURNSTILE_SITE_KEY:-}"
+  --dart-define=TURNSTILE_SITE_KEY="${TURNSTILE_SITE_KEY:-}" \
+  --dart-define=GOOGLE_WEB_CLIENT_ID="${GOOGLE_WEB_CLIENT_ID:-}"

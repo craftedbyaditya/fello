@@ -20,6 +20,8 @@ deployments. Add these **variables** (browser-safe values):
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `TURNSTILE_SITE_KEY`
+- `GOOGLE_WEB_CLIENT_ID` — Google OAuth **Web Client ID** (public; leave
+  unset until Google One Tap is configured)
 - `HOSTINGER_DOCUMENT_ROOT` — exactly `/public_html/kaydo`
 - `HOSTINGER_SSH_PORT` — `65002` (optional; script defaults to this value)
 
@@ -32,6 +34,9 @@ Add these **secrets**:
 
 Do not add service-role, Turnstile secret, AI, database, or Supabase CLI
 credentials. They do not belong in a browser deployment workflow.
+
+The Google OAuth client secret belongs only in Supabase Auth's Google provider
+configuration; never add it to GitHub Actions, Flutter dart-defines, or source.
 
 ## Release and rollback
 

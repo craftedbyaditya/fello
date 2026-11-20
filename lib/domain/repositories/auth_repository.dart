@@ -3,18 +3,12 @@ import '../entities/organization.dart';
 import '../entities/profile.dart';
 
 class AuthSession {
-  const AuthSession({
-    required this.profile,
-    required this.organization,
-  });
+  const AuthSession({required this.profile, required this.organization});
 
   final Profile profile;
   final Organization organization;
 
-  AuthSession copyWith({
-    Profile? profile,
-    Organization? organization,
-  }) {
+  AuthSession copyWith({Profile? profile, Organization? organization}) {
     return AuthSession(
       profile: profile ?? this.profile,
       organization: organization ?? this.organization,
@@ -26,10 +20,14 @@ abstract class AuthRepository {
   Stream<AuthSession?> get authStateChanges;
   AuthSession? get currentSession;
 
-  Future<AuthSession> signIn({
-    required String email,
-    required String password,
-  });
+  Future<AuthSession> signIn({required String email, required String password});
+
+  /// Starts the browser-based Google OAuth fallback flow.
+  Future<void> signInWithGoogleOAuth();
+
+  /// Exchanges a Google Identity Services One Tap ID token for a Supabase
+  /// session. The browser never receives a Supabase service-role credential.
+  Future<AuthSession> signInWithGoogleIdToken({required String idToken});
 
   Future<AuthSession> signUp({
     required String email,
@@ -46,10 +44,7 @@ abstract class AuthRepository {
   /// Sets a new password after the user opens a recovery link.
   Future<void> updatePassword({required String newPassword});
 
-  Future<Organization> updateOrganization({
-    required String name,
-    String? slug,
-  });
+  Future<Organization> updateOrganization({required String name, String? slug});
 
   /// Uploads (or removes) a workspace logo image and toggles public display.
   /// Paid plans only. [imageBytes] is a PNG/JPEG/WebP/SVG upload from the client.

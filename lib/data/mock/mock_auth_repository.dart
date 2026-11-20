@@ -46,6 +46,16 @@ class MockAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<void> signInWithGoogleOAuth() async {
+    throw AuthFailure('Google sign-in is unavailable in the local demo.');
+  }
+
+  @override
+  Future<AuthSession> signInWithGoogleIdToken({required String idToken}) async {
+    throw AuthFailure('Google sign-in is unavailable in the local demo.');
+  }
+
+  @override
   Future<AuthSession> signUp({
     required String email,
     required String password,
@@ -156,8 +166,9 @@ class MockAuthRepository implements AuthRepository {
   }) async {
     final session = _store.currentSession;
     if (session == null) throw AuthFailure('Not signed in.');
-    final index =
-        _store.organizations.indexWhere((o) => o.id == session.organization.id);
+    final index = _store.organizations.indexWhere(
+      (o) => o.id == session.organization.id,
+    );
     if (index < 0) throw AuthFailure('Organization not found.');
     final updated = session.organization.copyWith(
       name: name.trim(),
@@ -166,8 +177,10 @@ class MockAuthRepository implements AuthRepository {
           : session.organization.slug,
     );
     _store.organizations[index] = updated;
-    final newSession =
-        AuthSession(profile: session.profile, organization: updated);
+    final newSession = AuthSession(
+      profile: session.profile,
+      organization: updated,
+    );
     _store.setSession(newSession);
     return updated;
   }
@@ -191,8 +204,9 @@ class MockAuthRepository implements AuthRepository {
         'Workspace logo is available on paid plans. Upgrade on Billing.',
       );
     }
-    final index =
-        _store.organizations.indexWhere((o) => o.id == session.organization.id);
+    final index = _store.organizations.indexWhere(
+      (o) => o.id == session.organization.id,
+    );
     if (index < 0) throw AuthFailure('Organization not found.');
 
     String? nextUrl = session.organization.logoUrl;
@@ -212,8 +226,10 @@ class MockAuthRepository implements AuthRepository {
       showLogoOnForms: showOnForms,
     );
     _store.organizations[index] = updated;
-    final newSession =
-        AuthSession(profile: session.profile, organization: updated);
+    final newSession = AuthSession(
+      profile: session.profile,
+      organization: updated,
+    );
     _store.setSession(newSession);
     return updated;
   }
@@ -231,8 +247,9 @@ class MockAuthRepository implements AuthRepository {
       throw AuthFailure('Organisation name is required.');
     }
 
-    final index =
-        _store.organizations.indexWhere((o) => o.id == session.organization.id);
+    final index = _store.organizations.indexWhere(
+      (o) => o.id == session.organization.id,
+    );
     if (index < 0) throw AuthFailure('Organization not found.');
 
     final updated = session.organization.copyWith(
@@ -243,8 +260,10 @@ class MockAuthRepository implements AuthRepository {
       onboardingCompletedAt: DateTime.now(),
     );
     _store.organizations[index] = updated;
-    final newSession =
-        AuthSession(profile: session.profile, organization: updated);
+    final newSession = AuthSession(
+      profile: session.profile,
+      organization: updated,
+    );
     _store.setSession(newSession);
     return newSession;
   }
@@ -258,4 +277,3 @@ class MockAuthRepository implements AuthRepository {
     return slug.isEmpty ? 'workspace' : slug;
   }
 }
-

@@ -39,10 +39,7 @@ class SupabaseAuthRepository implements AuthRepository {
   }) async {
     try {
       await _client.auth
-          .signInWithPassword(
-            email: email.trim(),
-            password: password,
-          )
+          .signInWithPassword(email: email.trim(), password: password)
           .timeout(_timeout);
       final session = await _loadSessionWithRetry();
       if (session == null) {
@@ -61,8 +58,46 @@ class SupabaseAuthRepository implements AuthRepository {
         'Sign-in timed out. Check your connection and Supabase keys.',
       );
     } catch (_) {
+      throw AuthFailure("We couldn't sign you in. Please try again.");
+    }
+  }
+
+  @override
+  Future<void> signInWithGoogleOAuth() async {
+    try {
+      await _client.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: _publicRedirectBase(),
+      );
+    } on AuthException catch (e) {
+      throw AuthFailure(_friendlyAuthMessage(e));
+    } catch (_) {
+      throw AuthFailure("We couldn't start Google sign-in. Please try again.");
+    }
+  }
+
+  @override
+  Future<AuthSession> signInWithGoogleIdToken({required String idToken}) async {
+    try {
+      await _client.auth
+          .signInWithIdToken(provider: OAuthProvider.google, idToken: idToken)
+          .timeout(_timeout);
+      final session = await _loadSessionWithRetry();
+      if (session == null) {
+        throw AuthFailure(
+          'Google signed you in, but your workspace profile is missing.',
+        );
+      }
+      return session;
+    } on AuthFailure {
+      rethrow;
+    } on AuthException catch (e) {
+      throw AuthFailure(_friendlyAuthMessage(e));
+    } on TimeoutException {
+      throw AuthFailure('Google sign-in timed out. Please try again.');
+    } catch (_) {
       throw AuthFailure(
-        "We couldn't sign you in. Please try again.",
+        "We couldn't complete Google sign-in. Please try again.",
       );
     }
   }
@@ -75,19 +110,13 @@ class SupabaseAuthRepository implements AuthRepository {
     String? inviteToken,
   }) async {
     try {
-      final meta = <String, dynamic>{
-        'display_name': displayName.trim(),
-      };
+      final meta = <String, dynamic>{'display_name': displayName.trim()};
       final token = inviteToken?.trim();
       if (token != null && token.isNotEmpty) {
         meta['invite_token'] = token;
       }
       final response = await _client.auth
-          .signUp(
-            email: email.trim(),
-            password: password,
-            data: meta,
-          )
+          .signUp(email: email.trim(), password: password, data: meta)
           .timeout(_timeout);
 
       if (response.user == null) {
@@ -118,9 +147,7 @@ class SupabaseAuthRepository implements AuthRepository {
         'Sign-up timed out. Check your connection and Supabase keys.',
       );
     } catch (_) {
-      throw AuthFailure(
-        "We couldn't create your account. Please try again.",
-      );
+      throw AuthFailure("We couldn't create your account. Please try again.");
     }
   }
 
@@ -224,26 +251,20 @@ class SupabaseAuthRepository implements AuthRepository {
         final ext = _normalizeLogoExt(fileExtension, contentType);
         final mime = contentType ?? _mimeForExt(ext);
         final path = '$orgId/logo.$ext';
-        await _client.storage.from('org-logos').uploadBinary(
+        await _client.storage
+            .from('org-logos')
+            .uploadBinary(
               path,
               Uint8List.fromList(imageBytes),
-              fileOptions: FileOptions(
-                contentType: mime,
-                upsert: true,
-              ),
+              fileOptions: FileOptions(contentType: mime, upsert: true),
             );
-        final publicUrl =
-            _client.storage.from('org-logos').getPublicUrl(path);
-        nextUrl =
-            '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
+        final publicUrl = _client.storage.from('org-logos').getPublicUrl(path);
+        nextUrl = '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
       }
 
       final row = await _client
           .from('organizations')
-          .update({
-            'show_logo_on_forms': showOnForms,
-            'logo_url': nextUrl,
-          })
+          .update({'show_logo_on_forms': showOnForms, 'logo_url': nextUrl})
           .eq('id', orgId)
           .select()
           .single()
@@ -279,9 +300,9 @@ class SupabaseAuthRepository implements AuthRepository {
     try {
       final listed = await _client.storage.from('org-logos').list(path: orgId);
       if (listed.isEmpty) return;
-      await _client.storage.from('org-logos').remove(
-            listed.map((f) => '$orgId/${f.name}').toList(),
-          );
+      await _client.storage
+          .from('org-logos')
+          .remove(listed.map((f) => '$orgId/${f.name}').toList());
     } catch (_) {
       // Best-effort cleanup; org row still clears logo_url.
     }
@@ -388,8 +409,7 @@ class SupabaseAuthRepository implements AuthRepository {
           role: (profileRow['role'] as String?) == 'employee'
               ? ProfileRole.employee
               : ProfileRole.admin,
-          createdAt:
-              createdRaw == null ? null : DateTime.parse(createdRaw),
+          createdAt: createdRaw == null ? null : DateTime.parse(createdRaw),
         ),
         organization: _organizationFromRow(org),
       );
@@ -409,8 +429,9 @@ class SupabaseAuthRepository implements AuthRepository {
       slug: org['slug'] as String,
       createdAt: DateTime.parse(org['created_at'] as String),
       businessType: BusinessType.fromId(org['business_type'] as String?),
-      onboardingCompletedAt:
-          completedRaw == null ? null : DateTime.parse(completedRaw),
+      onboardingCompletedAt: completedRaw == null
+          ? null
+          : DateTime.parse(completedRaw),
       planId: PlanIdX.fromWire(org['plan_id'] as String?),
       planStatus: org['plan_status'] as String? ?? 'active',
       logoUrl: (logo == null || logo.isEmpty) ? null : logo,
